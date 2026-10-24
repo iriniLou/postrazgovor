@@ -74,8 +74,10 @@ const Sfx = {
 /* ---------- Озвучка (если в системе есть русский голос) ---------- */
 const Voice = {
   voice: null,
+  /* Озвучка отключена по просьбе автора: текст читает взрослый. Чтобы включить, поставьте ENABLED = true */
+  ENABLED: false,
   init() {
-    if (!("speechSynthesis" in window)) return;
+    if (!this.ENABLED || !("speechSynthesis" in window)) return;
     const choose = () => {
       const vs = speechSynthesis.getVoices();
       this.voice = vs.find(v => /ru/i.test(v.lang) && /irina|svetlana|milena|natalia|female/i.test(v.name)) || vs.find(v => /ru/i.test(v.lang)) || null;
@@ -128,8 +130,12 @@ function modal(content, { buttons = [{ text: "Понятно" }], onClose } = {}
     document.body.append(back);
   });
 }
-function toast(text, ms = 1800) {
-  const t = h("div", { class: "toast" }, text); document.body.append(t); setTimeout(() => t.remove(), ms);
+/* Подсказка внизу экрана. Висит тем дольше, чем длиннее текст (не меньше 4 секунд); закрывается по нажатию */
+function toast(text, ms = 0) {
+  document.querySelectorAll(".toast").forEach(x => x.remove());
+  const t = h("div", { class: "toast", title: "Нажмите, чтобы закрыть", onclick: () => t.remove() }, text);
+  document.body.append(t);
+  setTimeout(() => t.remove(), Math.max(ms, 4000 + String(text).length * 90));
 }
 
 /* ---------- Таймер ---------- */
@@ -180,14 +186,15 @@ function setupPlayers(stage, { min = 2, max = 6, def = 2, label = "Игроки"
     const box = h("div", { class: "players-setup stack" });
     const draw = () => {
       U.clear(box);
-      box.append(h("h2", { class: "center" }, label), note ? h("p", { class: "center muted" }, note) : null);
+      box.append(h("h2", { class: "center" }, label));
+      if (note) box.append(h("p", { class: "center muted" }, note));
       for (let i = 0; i < n; i++) {
         const inp = h("input", { value: names[i], maxlength: 24, "aria-label": `${noun} ${i + 1}`, oninput: e => names[i] = e.target.value });
         box.append(h("div", { class: "pl-row" }, h("span", { class: "em", style: { fontSize: "24px" } }, AVATARS[i]),
           h("span", { class: "swatch", style: { background: COLORS[i] } }), inp,
           n > min ? h("button", { class: "icon-btn", title: "Убрать", onclick: () => { names.splice(i, 1); names.push(`${noun} ${max}`); n--; draw(); } }, "✕") : null));
       }
-      if (n < max) box.append(h("button", { class: "btn ghost small", onclick: () => { n++; draw(); } }, `＋ Добавить (${noun.toLowerCase()})`));
+      if (n < max) box.append(h("button", { class: "btn ghost small", onclick: () => { n++; draw(); } }, "＋ Добавить " + ({ "Команда": "команду", "Игрок": "игрока" }[noun] || noun.toLowerCase())));
       if (extra) box.append(extra);
       box.append(h("div", { class: "row c" }, h("button", {
         class: "btn big", onclick: () => {
@@ -238,16 +245,17 @@ function finale(stage, { title, text, stars, facts = [], players, onAgain, hasht
 }
 
 /* Вопрос с вариантами. Возвращает Promise<boolean> */
-function askOptions(container, options, correct, { onPick, keys = true } = {}) {
+/* reveal: false — при ошибке не показывать верный ответ (например, пока его могут перехватить). disabled — номера вариантов, которые уже не выбрать */
+function askOptions(container, options, correct, { onPick, reveal = true, disabled = [] } = {}) {
   return new Promise(res => {
     const letters = "АБВГДЕ";
     let done = false;
     const btns = options.map((o, i) => h("button", {
-      class: "opt", onclick: () => choose(i),
+      class: "opt" + (disabled.includes(i) ? " wrong" : ""), disabled: disabled.includes(i), onclick: () => choose(i),
     }, h("span", { class: "k" }, letters[i]), o));
     const choose = i => {
       if (done) return; done = true;
-      btns.forEach((b, j) => { b.disabled = true; if (j === correct) b.classList.add("right"); });
+      btns.forEach((b, j) => { b.disabled = true; if (j === correct && (reveal || i === correct)) b.classList.add("right"); });
       if (i !== correct) { btns[i].classList.add("wrong"); Sfx.bad(); } else Sfx.ok();
       onPick && onPick(i);
       res(i === correct);
@@ -340,7 +348,7 @@ const App = {
     r.append(h("section", { class: "hero" },
       h("h1", null, "Постразговор"),
       h("p", null, "Игры к занятию «Разговоры о важном» 9 ноября 2026 года. Для каждой возрастной группы — три игры: «Я – сам», «Я с командой» (с друзьями, одноклассниками или однокурсниками) и «Я с семьёй»."),
-      h("div", { class: "tags" }, h("span", { class: "tag" }, "Работает без интернета"), h("span", { class: "tag" }, "24 игры"), h("span", { class: "tag" }, "Компьютер, планшет или телефон"))));
+      h("div", { class: "tags" }, h("span", { class: "tag" }, "24 игры"), h("span", { class: "tag" }, "Компьютер, планшет или телефон"))));
     for (const topic of TOPICS) {
       r.append(h("div", { class: "topic theme-" + topic.theme }, h("span", { class: "dot" }), h("h2", null, topic.title), h("span", { class: "muted" }, topic.sub)));
       r.append(h("div", { class: "groups theme-" + topic.theme }, GROUPS.filter(g => g.topic === topic.id).map(g =>

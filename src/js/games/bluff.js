@@ -67,7 +67,10 @@
           await new Promise(res => {
             U.clear(stage).append(h("div", { class: "stack", style: { maxWidth: "640px", margin: "0 auto" } },
               h("p", { class: "pill" }, `${p.avatar} ${p.name}`), h("h2", null, text.replace("___", "______")),
-              h("div", { class: "options" }, options.filter(o => o.by !== p).map(o => h("button", { class: "opt", onclick: () => { o.votes.push(p); Sfx.click(); res(); } }, o.text)))));
+              h("p", { class: "muted" }, `Все ответы: ${options.length}. Свой выбрать нельзя — найди среди остальных правду.`),
+              h("div", { class: "options" }, options.map(o => o.by === p
+                ? h("button", { class: "opt", disabled: true, style: { opacity: .5 } }, o.text, h("div", { class: "small muted" }, "это твой ответ"))
+                : h("button", { class: "opt", onclick: () => { o.votes.push(p); Sfx.click(); res(); } }, o.text)))));
           });
         }
         // 3. Разоблачение

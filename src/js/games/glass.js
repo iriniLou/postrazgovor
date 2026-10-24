@@ -5,50 +5,62 @@
   const COL = {
     blue: { name: "синий", hex: "#2846a8" },
     green: { name: "зелёный", hex: "#2f8f4e" },
-    teal: { name: "бирюзовый", hex: "#2bb3b1" },
+    teal: { name: "бирюзовый", hex: "#5cc6d0" },
     red: { name: "рубиновый", hex: "#b3123a" },
-    violet: { name: "фиолетовый", hex: "#6c3fa3" },
-    amber: { name: "жёлтый", hex: "#e0a526" },
-    white: { name: "белый", hex: "#f3f1ea" },
+    violet: { name: "фиолетовый", hex: "#7b4bb5" },
+    amber: { name: "жёлтый", hex: "#f0b429" },
+    white: { name: "белый", hex: "#f7f5ee" },
+    brown: { name: "коричневый", hex: "#8a5a32" },
+    black: { name: "чёрный", hex: "#23202a" },
     pink: { name: "бледно-розовый", hex: "#efc3cd", bad: true },
     clear: { name: "прозрачный зеленоватый", hex: "#cfe6d4", bad: true },
-    brown: { name: "мутно-бурый", hex: "#7a5a3a", bad: true },
+    murky: { name: "мутно-бурый", hex: "#9b8a6a", bad: true },
   };
   // Добавки: результат зависит от жара печи (обычный / сильный и долгий)
   const ADD = [
     { id: "none", name: "Без добавки", em: "🫙", res: ["clear", "clear"] },
     { id: "co", name: "Кобальт", em: "🔵", res: ["blue", "blue"], hint: "Кобальт даёт стеклу глубокий синий цвет — его видно даже в маленьком кусочке." },
-    { id: "cu", name: "Медь", em: "🟤", res: ["green", "teal"], hint: "Медь даёт зелёный цвет, а при сильном и долгом жаре стекло становится бирюзовым." },
+    { id: "cu", name: "Медь", em: "🟢", res: ["green", "teal"], hint: "Медь даёт зелёный цвет, а при сильном и долгом жаре стекло становится бирюзовым." },
     { id: "au", name: "Золото", em: "🟡", res: ["pink", "red"], hint: "Капля золота даёт рубиновый цвет, но только если стекло долго держать в сильном жаре. Иначе выйдет бледно-розовое." },
     { id: "mn", name: "Марганец", em: "🟣", res: ["violet", "violet"], hint: "Марганец окрашивает стекло в фиолетовый цвет." },
-    { id: "sb", name: "Сурьма", em: "⚪", res: ["amber", "brown"], hint: "Сурьма даёт жёлтую смальту. Если перегреть — цвет темнеет и мутнеет." },
+    { id: "sb", name: "Сурьма", em: "⚪", res: ["amber", "murky"], hint: "Сурьма даёт жёлтую смальту. Если перегреть — цвет темнеет и мутнеет." },
     { id: "sn", name: "Олово", em: "🥈", res: ["white", "white"], hint: "Олово делает стекло белым и непрозрачным — такую смальту называют «глухой»." },
+    { id: "fe", name: "Железо", em: "🟤", res: ["brown", "black"], hint: "Железо даёт коричневое стекло, а если добавить его много и долго держать в жаре — почти чёрное." },
   ];
-  // Мозаики (12×12). Буква — цвет: b синий, g зелёный, t бирюзовый, r рубиновый, v фиолетовый, a жёлтый, w белый
+  // Мозаики 16×16. Буква — цвет: b синий, g зелёный, t бирюзовый, r рубиновый, v фиолетовый, a жёлтый, w белый, n коричневый, k чёрный
   const PICS = [
-    {
-      title: "Парусник на Белом море", em: "⛵",
-      fact: "Ломоносов вырос у Белого моря и с детства ходил с отцом на парусном судне.",
+    { title: "Парусник на Белом море", em: "⛵", fact: "Ломоносов вырос у Белого моря и с детства ходил с отцом на парусном судне.",
       rows: [
-        "tttttttttaat", "tttttwtttaat", "ttttwwtttttt", "tttwwwwttttt", "ttwwwwwttttt", "twwwwwwttttt",
-        "tttttrtttttt", "trrrrrrrrrtt", "ttrrrrrrrttt", "bbbbbbbbbbbb", "bbtbbbbbtbbb", "bbbbbbbbbbbb"],
-    },
-    {
-      title: "Венера на фоне Солнца", em: "🔭",
-      fact: "В 1761 году Ломоносов увидел светлый ободок вокруг Венеры и догадался: у планеты есть атмосфера.",
+        "tttttttttttttttt", "ttttttttkrrtaatt", "ttttttttkrtaaaat", "tttttttwkttaaaat",
+        "ttttttwwkwttaatt", "tttttwwwkwwttttt", "ttttwwwwkwwwtttt", "tttwwwwwkwwwwttt",
+        "ttwwwwwwkwwwwttt", "twwwwwwwkwwwwttt", "tnnnnannannannnt", "tttnnnnnnnnnnttt",
+        "bbbbbbbbbbbbbbbb", "bwwbbbbbbbbwwbbb", "bbbbbbwwbbbbbbbb", "bbbwbbbbbbbbbbwb"] },
+    { title: "Венера на фоне Солнца", em: "🔭", fact: "В 1761 году Ломоносов увидел светлый ободок вокруг Венеры и догадался: у планеты есть атмосфера.",
       rows: [
-        "vvvvvvvvvvvv", "vvvaaaaaavvv", "vvaaaaaaaavv", "vaaaaaaaaaav", "vaaaawwwaaav", "vaaawbbbwaav",
-        "vaaawbbbwaav", "vaaaawwwaaav", "vaaaaaaaaaav", "vvaaaaaaaavv", "vvvaaaaaavvv", "vvvvvvvvvvvv"],
-    },
-    {
-      title: "Северное сияние", em: "🌌",
-      fact: "Ломоносов изучал северное сияние и написал о нём знаменитые стихи: «Открылась бездна звёзд полна; Звездам числа нет, бездне дна».",
+        "wkkkkkkkkkkkkkkk", "kkkkkkkkkkkkkkwk", "kkkkkrrrrrrkkkkk", "kkwkraaaaaarkkkk",
+        "kkkraaaaaaaarkkk", "kkraaaaaaaaaarkk", "kkraaaaaaaaaarkw", "kraaaaaaaaaaaark",
+        "kraaaaaaawwaaark", "kraaaaaawvvwaark", "kkraaaaawvvwarkk", "kkraaaaaawwaarkk",
+        "kkkraaaaaaaarkkk", "kkkkraaaaaarkkkw", "kwkkkrrrrrrkkkkk", "kkkkkkkkkkkkkwkk"] },
+    { title: "Северное сияние над домом", em: "🌌", fact: "Ломоносов изучал северное сияние и написал о нём знаменитые стихи: «Открылась бездна звёзд полна; Звездам числа нет, бездне дна».",
       rows: [
-        "bbbbbbbbbbbb", "bbgbbbbbbwbb", "bggtbbbbbbbb", "bbgttbbbvbbb", "bbbgttbvvbbb", "bwbbgttvbbbb",
-        "bbbbbgtvbbwb", "bbbbbbggbbbb", "wwwwwwwwwwww", "wwrrwwwwwwww", "wrrrrwwwwwww", "wwrrwwwwwwww"],
-    },
+        "bwbbbbbbbbbbwbbb", "bbbbbbwbbbggbbbb", "bbbbbbbbggttggwb", "gbbbbbbgttbbttgb",
+        "tggbbggtbbbbbbtg", "bttvvvvvbbbbbbbv", "bbvttbbbvbbbbvvb", "vvbbbbbbbvvvvbbb",
+        "bbbbbbbbbbbbbwbb", "bbwbbbbrbbbbbgbb", "bbbbbbrrrbbbgggb", "bbbbbrrrrrbggggg",
+        "bbbbrrrrrrrbbnbb", "wwwwbnanknbwwwww", "wwwwwnnnknwwwwww", "wwwwwwwwwwwwwwww"] },
+    { title: "Белый медведь на льдине", em: "🐻‍❄️", fact: "Белые медведи живут на берегах Белого и других северных морей — там, где рос Ломоносов.",
+      rows: [
+        "tttttttttttttttt", "taaatttttttttttt", "taaatttttttttttt", "taaatttttttttttt",
+        "tttttttttttttttt", "tttttttttttwtttt", "ttttttwwtttwkwtt", "tttwwwwwwwwwwwkt",
+        "ttwwwwwwwwwwwwwt", "ttwwwwwwwwwwtttt", "tttwwwwwwwwttttt", "tttwwtwwwwtttttt",
+        "wwwwwwwwwwwwwwww", "bwwwwwwwwwwwwwbb", "bbbbtbbbbbbbbbtb", "bbbbbbbbbbtbbbbb"] },
+    { title: "Рыба из обоза", em: "🐟", fact: "В Москву Ломоносов ушёл вместе с обозом, который вёз на продажу мороженую рыбу.",
+      rows: [
+        "bbbbbbbbbbbbbbbb", "bbbbtbbbbbbbbbbb", "bbbtbbbbbbbtbbbb", "bbbbbbbbbbtbbbbb",
+        "bbbbbbbbbbbbbbbb", "bbbbbrrarrbbnbbb", "bbbrrrarrarrnnbb", "bbbrkwrrarrrnnnb",
+        "bbrrrrrarrrrnnnn", "bbbrrrarrarrnnnb", "bbbrrarrarrrnnbb", "bbbbbrrarrbbnbbb",
+        "bbbbbbbbbbbbbbbb", "bbtgbbbbbbbbbbbg", "bgbbbbbbbbbbtbgb", "gggggggggggggggg"] },
   ];
-  const LET = { b: "blue", g: "green", t: "teal", r: "red", v: "violet", a: "amber", w: "white" };
+  const LET = { b: "blue", g: "green", t: "teal", r: "red", v: "violet", a: "amber", w: "white", n: "brown", k: "black" };
 
   Games.register({
     id: "glass", group: "3-4", mode: "solo", emoji: "⚗️", title: "Стекольная мастерская",
@@ -58,19 +70,23 @@
       "Выбери мозаику. Посмотри, какие цвета смальты для неё нужны.",
       "В мастерской выбери добавку и жар печи, нажми «Плавить». Получится стекло какого-то цвета.",
       "Все опыты записываются в журнал. Не вышло — попробуй иначе: другую добавку или другой жар.",
-      "Когда все нужные цвета готовы, собери мозаику: выбери цвет и нажимай на клетки с его номером.",
+      "Когда все нужные цвета готовы, собери мозаику по номерам: выбери цвет и нажимай на клетки с его номером — сразу всю область или по одной клетке.",
       "Чем меньше опытов понадобилось, тем больше звёзд.",
       "Химия в игре упрощена: в настоящей мастерской цвет зависел ещё от состава стекла, количества добавки и многих других условий.",
     ],
     start(stage, ctx) {
       let pic, need, made = new Set(), journal = [];
 
+      const LIGHT = ["white", "amber", "teal"];
+      const thumb = (rows, size = 6) => h("div", { style: { display: "grid", gridTemplateColumns: `repeat(16, ${size}px)`, gridAutoRows: size + "px", margin: "0 auto", borderRadius: "6px", overflow: "hidden", width: "fit-content" } },
+        rows.join("").split("").map(l => h("span", { style: { background: COL[LET[l]].hex } })));
       const choosePic = () => {
         U.clear(stage).append(h("div", { class: "center stack" },
           h("h2", null, "Какую мозаику соберём?"),
-          h("p", { class: "muted" }, "В мастерской Ломоносова мозаики собирали из смальты — кусочков цветного непрозрачного стекла. Сначала стекло нужно сварить!"),
-          h("div", { class: "row c" }, PICS.map(p => h("button", { class: "btn ghost big", style: { flexDirection: "column", minWidth: "200px" }, onclick: () => { pic = p; lab(); } },
-            h("span", { class: "em", style: { fontSize: "44px" } }, p.em), p.title)))));
+          h("p", { class: "muted" }, "В мастерской Ломоносова мозаики собирали из смальты — кусочков цветного непрозрачного стекла. Сначала стекло нужно сварить, а потом — выложить картину по номерам!"),
+          h("div", { class: "row c" }, PICS.map(p => h("button", { class: "btn ghost", style: { flexDirection: "column", width: "190px", padding: "14px" }, onclick: () => { pic = p; lab(); } },
+            thumb(p.rows, 7), h("span", { style: { marginTop: "8px" } }, p.title),
+            h("span", { class: "small muted" }, `цветов: ${new Set(p.rows.join("")).size}`))))));
       };
 
       const lab = () => {
@@ -86,7 +102,7 @@
         const toMosaic = h("button", { class: "btn big ok hidden", onclick: () => mosaic() }, "🧩 Собирать мозаику");
 
         const drawNeed = () => U.clear(needBox).append(need.map(c => h("span", {
-          class: "pill", style: { background: made.has(c) ? COL[c].hex : "#fff", color: made.has(c) && !["white", "amber"].includes(c) ? "#fff" : "var(--ink)", border: "2px solid " + COL[c].hex },
+          class: "pill", style: { background: made.has(c) ? COL[c].hex : "#fff", color: made.has(c) && !LIGHT.includes(c) ? "#fff" : "var(--ink)", border: "2px solid " + COL[c].hex },
         }, (made.has(c) ? "✓ " : "") + COL[c].name)));
         const drawAdd = () => U.clear(addBox).append(ADD.map(a => h("button", {
           class: "btn small " + (a === add ? "" : "ghost"), onclick: () => { add = a; drawAdd(); Sfx.click(); },
@@ -132,46 +148,71 @@
 
       const mosaic = () => {
         const cols = [...need];
-        let cur = cols[0];
+        let cur = cols[0], mode = "fill", painting = false;
         const grid = pic.rows.map(r => r.split("").map(l => ({ c: LET[l], done: false })));
         const num = c => cols.indexOf(c) + 1;
-        const N = 12, ts = U.clamp(Math.floor((stage.clientWidth - 60) / N), 22, 40);
-        const board = h("div", { style: { display: "grid", gridTemplateColumns: `repeat(${N}, ${ts}px)`, gap: "2px", justifyContent: "center", background: "#cfc6b6", padding: "6px", borderRadius: "12px", width: "fit-content", margin: "0 auto" } });
+        const N = 16, ts = U.clamp(Math.floor((stage.clientWidth - 50) / N) - 2, 18, 38);
+        const board = h("div", { style: { display: "grid", gridTemplateColumns: `repeat(${N}, ${ts}px)`, gap: "2px", justifyContent: "center", background: "#cfc6b6", padding: "6px", borderRadius: "12px", width: "fit-content", margin: "0 auto", touchAction: "none", userSelect: "none" } });
         const cellsEl = [];
         grid.forEach((row, y) => row.forEach((cell, x) => {
-          const el = h("button", { style: { width: ts + "px", height: ts + "px", border: 0, borderRadius: "4px", background: "#fffaf1", fontSize: Math.round(ts * .42) + "px", color: "#8a7f70", cursor: "pointer", padding: 0 }, onclick: () => tap(x, y) }, num(cell.c));
+          const el = h("div", { "data-x": x, "data-y": y, style: { width: ts + "px", height: ts + "px", borderRadius: "3px", background: "#fffaf1", fontSize: Math.round(ts * .5) + "px", fontWeight: 650, color: "#8a7f70", cursor: "pointer", display: "grid", placeItems: "center", lineHeight: 1 } }, num(cell.c));
           cellsEl.push(el); board.append(el);
         }));
+        const left = h("span", { class: "pill" });
         const palette = h("div", { class: "row c" });
-        const drawPal = () => U.clear(palette).append(cols.map(c => h("button", {
-          class: "btn small", style: { background: COL[c].hex, color: ["white", "amber"].includes(c) ? "#222" : "#fff", outline: c === cur ? "4px solid var(--ink)" : "none", outlineOffset: "2px" },
-          onclick: () => { cur = c; drawPal(); },
-        }, `${num(c)} · ${COL[c].name}`)));
+        const modeBox = h("div", { class: "row c" });
+        const remain = c => grid.flat().filter(x => !x.done && x.c === c).length;
+        const drawPal = () => {
+          U.clear(palette).append(cols.map(c => h("button", {
+            class: "btn small", style: { background: COL[c].hex, color: LIGHT.includes(c) ? "#222" : "#fff", outline: c === cur ? "4px solid var(--ink)" : "none", outlineOffset: "2px", opacity: remain(c) ? 1 : .45 },
+            onclick: () => { cur = c; drawPal(); highlight(); },
+          }, `${num(c)} · ${COL[c].name}` + (remain(c) ? "" : " ✓"))));
+          left.textContent = `Осталось клеток: ${grid.flat().filter(x => !x.done).length}`;
+        };
+        const drawMode = () => U.clear(modeBox).append([["fill", "🪣 Закрашивать всю область"], ["cell", "✏️ По одной клетке"]].map(([m, t]) =>
+          h("button", { class: "btn small " + (mode === m ? "dark" : "ghost"), onclick: () => { mode = m; drawMode(); } }, t)));
+        // подсвечиваем клетки выбранного цвета, чтобы их было легко найти
+        const highlight = () => grid.forEach((row, y) => row.forEach((cell, x) => {
+          if (cell.done) return;
+          const el = cellsEl[y * N + x];
+          el.style.background = cell.c === cur ? "#fff0c2" : "#fffaf1"; el.style.color = cell.c === cur ? "var(--ink)" : "#8a7f70";
+        }));
+        const paint = (x, y) => {
+          const cell = grid[y][x]; cell.done = true;
+          const el = cellsEl[y * N + x]; el.style.background = COL[cell.c].hex; el.textContent = ""; el.style.boxShadow = "inset 0 0 0 1px #0001, inset 2px 2px 0 #fff4";
+        };
         const fillRegion = (x, y) => {
-          const c = grid[y][x].c, st = [[x, y]]; let n = 0;
+          const c = grid[y][x].c, st = [[x, y]];
           while (st.length) {
             const [a, b] = st.pop(); const cell = grid[b] && grid[b][a];
             if (!cell || cell.done || cell.c !== c) continue;
-            cell.done = true; n++;
-            const el = cellsEl[b * N + a]; el.style.background = COL[c].hex; el.textContent = ""; el.style.boxShadow = "inset 0 0 0 1px #0001, inset 2px 2px 0 #fff3";
-            st.push([a + 1, b], [a - 1, b], [a, b + 1], [a, b - 1]);
+            paint(a, b); st.push([a + 1, b], [a - 1, b], [a, b + 1], [a, b - 1]);
           }
-          return n;
         };
-        const tap = (x, y) => {
+        let warned = 0;
+        const tap = (x, y, fromDrag) => {
           const cell = grid[y][x]; if (cell.done) return;
-          if (cell.c !== cur) { Sfx.bad(); toast(`Здесь номер ${num(cell.c)} — нужен ${COL[cell.c].name} цвет`); return; }
-          fillRegion(x, y); Sfx.tone(500 + Math.random() * 400, .08, "triangle", .1);
+          if (cell.c !== cur) {
+            if (!fromDrag && Date.now() - warned > 1500) { warned = Date.now(); Sfx.bad(); toast(`Здесь номер ${num(cell.c)} — нужен ${COL[cell.c].name} цвет`); }
+            return;
+          }
+          mode === "fill" ? fillRegion(x, y) : paint(x, y);
+          Sfx.tone(500 + Math.random() * 400, .06, "triangle", .08);
+          drawPal();
           if (grid.every(r => r.every(c => c.done))) done();
         };
+        const cellAt = e => { const el = document.elementFromPoint(e.clientX, e.clientY); return el && el.dataset && el.dataset.x != null ? el : null; };
+        board.addEventListener("pointerdown", e => { const el = cellAt(e); if (!el) return; painting = true; tap(+el.dataset.x, +el.dataset.y, false); });
+        board.addEventListener("pointermove", e => { if (!painting || mode !== "cell") return; const el = cellAt(e); if (el) tap(+el.dataset.x, +el.dataset.y, true); });
+        const stop = () => painting = false;
+        addEventListener("pointerup", stop); ctx.onCleanup(() => removeEventListener("pointerup", stop));
         const done = () => {
           const extra = journal.length - need.length;
-          const stars = extra <= 2 ? 3 : extra <= 6 ? 2 : 1;
-          const art = board.cloneNode(true); art.querySelectorAll("button").forEach(b => b.disabled = true);
+          const stars = extra <= 3 ? 3 : extra <= 8 ? 2 : 1;
           finale(stage, {
             stars, title: `Мозаика «${pic.title}» готова!`,
-            text: `Тебе понадобилось опытов: ${journal.length}. ${extra <= 2 ? "Почти без ошибок — как настоящий мастер!" : "Каждая неудача подсказывала, что поменять. Так и работают исследователи."}`,
-            extra: art,
+            text: `Тебе понадобилось опытов: ${journal.length}. ${extra <= 3 ? "Почти без ошибок — как настоящий мастер!" : "Каждая неудача подсказывала, что поменять. Так и работают исследователи."}`,
+            extra: thumb(pic.rows, U.clamp(Math.floor((stage.clientWidth - 40) / 16), 12, 26)),
             facts: [
               `<b>Ты знаешь?</b> ${pic.fact}`,
               "<b>Мозаика «Полтавская баталия»</b> из мастерской Ломоносова — огромная картина площадью около 30 квадратных метров. Её собрали из тысяч кусочков смальты.",
@@ -182,9 +223,9 @@
         };
         U.clear(stage).append(h("div", { class: "stack center" },
           h("h2", null, "Собери мозаику «" + pic.title + "»"),
-          h("p", { class: "muted" }, "Выбери цвет и нажимай на клетки с его номером — закрасится вся область сразу."),
-          palette, board));
-        drawPal();
+          h("p", { class: "muted" }, "Выбери цвет — его клетки подсветятся. Нажимай на клетки с этим номером. В режиме «По одной клетке» можно вести пальцем или мышкой."),
+          modeBox, palette, left, board));
+        drawMode(); drawPal(); highlight();
       };
 
       choosePic();

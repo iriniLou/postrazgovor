@@ -74,7 +74,7 @@
         used.add(ci + ":" + vi);
         const [q, opts, right, note] = BOARD[ci].qs[vi], val = VAL[vi];
         const order = U.shuffle(opts.map((_, i) => i));
-        let answering = turn, stolen = false;
+        let answering = turn, stolen = false, wrongPick = [];
         const timer = new Timer(30, { onEnd: () => toast("Время! Выбирайте ответ") });
         const head = h("h3", { class: "center" });
         const box = h("div", { class: "stack", style: { maxWidth: "720px", margin: "0 auto" } });
@@ -82,7 +82,8 @@
         const drawHead = () => { const t = teams[answering]; head.textContent = `${stolen ? "Перехват! " : ""}Отвечает ${t.avatar} «${t.name}» · ${stolen ? val / 2 : val}`; head.style.color = t.color; };
         const askRound = () => {
           U.clear(box).append(h("div", { class: "pill" }, `${BOARD[ci].cat} · ${val}`), h("h2", null, q));
-          askOptions(box, order.map(i => opts[i]), order.indexOf(right)).then(ok => {
+          // при первой ошибке верный ответ не показываем: соперники могут перехватить вопрос
+          askOptions(box, order.map(i => opts[i]), order.indexOf(right), { reveal: stolen, disabled: wrongPick, onPick: k => { if (!stolen) wrongPick = [k]; } }).then(ok => {
             timer.stop();
             const t = teams[answering], pts = stolen ? val / 2 : val;
             if (ok) { t.score += pts; done(`+${pts} команде «${t.name}»`); }
@@ -96,6 +97,7 @@
           });
         };
         const done = msg => {
+          [...box.querySelectorAll(".opt")].forEach((b, k) => { b.disabled = true; if (k === order.indexOf(right)) b.classList.add("right"); });
           U.clear(after).append(h("div", { class: "fact" }, h("b", null, "Ответ: " + opts[right] + ". "), note), h("p", null, msg),
             h("button", { class: "btn big", onclick: () => { turn = (turn + 1) % teams.length; drawBoard(); } }, "К табло ▶"));
         };

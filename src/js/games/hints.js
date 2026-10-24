@@ -28,8 +28,10 @@
     players: "2–6 игроков", time: "15–20 минут",
     rules: [
       "Один читает подсказки вслух (или все смотрят на экран). Подсказки открываются по одной.",
-      "Кто догадался — кричит ответ. Если верно, нажмите его имя: очков столько, сколько подсказок ещё не открыто, плюс одно.",
-      "Ошибся — пропускаешь эту карточку, остальные играют дальше.",
+      "Кто догадался — ничего не говорит вслух, а нажимает своё имя под словами «Знаю ответ!».",
+      "Важно: в этот момент на экран смотрит только тот, кто отвечает. Все остальные отворачиваются — ведь если он ошибётся, они продолжат угадывать эту карточку.",
+      "Отвечающий сверяет свой ответ с экраном. Угадал — очков столько, сколько подсказок ещё не открыто, плюс одно, и ответ видят все.",
+      "Ошибся — больше не участвует в этой карточке, остальные поворачиваются и играют дальше.",
       "10 карточек. Побеждает тот, у кого больше очков.",
     ],
     async start(stage, ctx) {
@@ -55,10 +57,20 @@
           }, p.avatar + " " + p.name)));
         };
         const guessed = async i => {
-          const v = await modal(h("div", { class: "center stack" }, h("h2", null, `${players[i].name} отвечает`), h("p", null, "Правильно?"), h("div", { class: "big-emoji" }, c.em), h("div", { class: "title-xl" }, c.a)),
-            { buttons: [{ text: "✓ Верно", value: true, cls: "ok" }, { text: "✗ Нет", value: false, cls: "bad" }] });
-          if (v) { players[i].score += 6 - open; Sfx.ok(); reveal(players[i]); }
-          else { out.add(i); Sfx.bad(); if (out.size === players.length) reveal(null); else draw(); }
+          const p = players[i];
+          const go = await modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji" }, "🙈"),
+            h("h2", null, `Все, кроме ${p.name}, отвернитесь от экрана!`),
+            h("p", null, `${p.avatar} ${p.name}, задумай ответ и посмотри, совпал ли он. Если ошибёшься, остальные продолжат угадывать эту карточку — поэтому им смотреть нельзя.`)),
+            { buttons: [{ text: `Показать ответ (смотрит только ${p.name})`, value: true }, { text: "Отмена", value: false, cls: "ghost" }] });
+          if (!go) return;
+          const v = await modal(h("div", { class: "center stack" }, h("p", { class: "muted" }, `Смотрит только ${p.name}`), h("div", { class: "big-emoji" }, c.em), h("div", { class: "title-xl" }, c.a), h("p", null, "Твой ответ совпал?")),
+            { buttons: [{ text: "✓ Да, угадал(а)", value: true, cls: "ok" }, { text: "✗ Нет", value: false, cls: "bad" }] });
+          if (v) { p.score += 6 - open; Sfx.ok(); reveal(p); return; }
+          out.add(i); Sfx.bad();
+          if (out.size === players.length) return reveal(null);
+          await modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji" }, "👀"), h("h2", null, "Можно поворачиваться!"),
+            h("p", null, `${p.name} ошибся(лась) и больше не отвечает на эту карточку. Остальные угадывают дальше.`)), { buttons: [{ text: "Играем дальше ▶" }] });
+          draw();
         };
         const reveal = async p => {
           await modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji bounce" }, c.em), h("h2", null, c.a),
@@ -70,7 +82,7 @@
           h("div", { class: "row", style: { justifyContent: "space-between" } }, h("b", null, `Карточка ${n} из ${deck.length}`), pts),
           h("div", { class: "panel" }, list),
           h("div", { class: "row c" }, more, Voice.button(() => c.hints[open - 1]), h("button", { class: "btn ghost", onclick: () => reveal(null) }, "Показать ответ")),
-          h("p", { class: "center muted small" }, "Кто угадал?"), who));
+          h("p", { class: "center", style: { fontWeight: 700 } }, "Знаю ответ! (нажми своё имя)"), who));
         draw();
       };
       next();

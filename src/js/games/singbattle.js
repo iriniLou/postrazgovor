@@ -18,7 +18,7 @@
       "На экране появляется слово, например «небо».",
       "Команды по очереди поют хотя бы строчку любой песни, где есть это слово. На ход — 20 секунд.",
       "Повторять песни нельзя. Соперники решают, засчитать ли ответ.",
-      "Кто не успел вспомнить — проиграл раунд, соперники получают очко. За песню Пахмутовой и Добронравова — ещё +1.",
+      "Каждая спетая песня — +1 очко, песня Пахмутовой и Добронравова — +2. Кто не успел вспомнить — проиграл раунд, а соперники получают ещё +2.",
       "Застряли? Есть подсказка — название песни Пахмутовой на эту тему (не для всех слов).",
     ],
     async start(stage, ctx) {
@@ -40,19 +40,21 @@
           U.clear(turnBox).append(
             h("h3", { style: { color: t.color } }, `Поёт команда ${t.avatar} «${t.name}»`), timer.el,
             h("div", { class: "row c" },
-              h("button", { class: "btn ok big", onclick: () => { timer.stop(); Sfx.ok(); sung++; turn = 1 - turn; drawTurn(); } }, "✓ Спели!"),
-              h("button", { class: "btn dark", onclick: () => { timer.stop(); Sfx.ok(); sung++; t.score++; toast("Песня Пахмутовой! +1"); turn = 1 - turn; drawTurn(); } }, "✓ Спели песню Пахмутовой (+1)"),
+              h("button", { class: "btn ok big", onclick: () => { timer.stop(); Sfx.ok(); sung++; t.score += 1; refresh(); turn = 1 - turn; drawTurn(); } }, "✓ Спели! (+1)"),
+              h("button", { class: "btn dark", onclick: () => { timer.stop(); Sfx.ok(); sung++; t.score += 2; refresh(); toast("Песня Пахмутовой и Добронравова! +2"); turn = 1 - turn; drawTurn(); } }, "✓ Спели песню Пахмутовой (+2)"),
               h("button", { class: "btn bad", onclick: () => { timer.stop(); lose(); } }, "✗ Не вспомнили")));
           timer.start();
         };
         const lose = async () => {
           const loser = teams[turn], winner = teams[1 - turn];
-          winner.score++; Sfx.buzz();
-          await modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji" }, "🏆"), h("h2", null, `Раунд за командой «${winner.name}»!`),
+          winner.score += 2; refresh(); Sfx.buzz();
+          await modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji" }, "🏆"), h("h2", null, `Раунд за командой «${winner.name}»! +2`),
             h("p", null, `Слово «${word}»: спето песен — ${sung}.`), hint ? h("p", { class: "muted" }, `А у Пахмутовой и Добронравова есть: ${hint}.`) : null), { buttons: [{ text: "Следующее слово ▶" }] });
           nextRound();
         };
-        U.clear(stage).append(scoreBar(teams), h("div", { class: "center stack" },
+        let bar = scoreBar(teams);
+        const refresh = () => { const nb = scoreBar(teams); bar.replaceWith(nb); bar = nb; };
+        U.clear(stage).append(bar, h("div", { class: "center stack" },
           h("span", { class: "pill" }, `Раунд ${round} из ${ROUNDS}`), h("p", { class: "muted" }, "Пойте песни со словом"),
           h("div", { class: "title-xl bounce", style: { fontSize: "clamp(40px, 10vw, 72px)", color: "var(--accent)" } }, "«" + word + "»"),
           hint ? h("button", { class: "btn ghost small", onclick: e => { e.target.replaceWith(h("p", { class: "panel" }, "Подсказка: " + hint)); } }, "💡 Подсказка из песен Пахмутовой") : null,

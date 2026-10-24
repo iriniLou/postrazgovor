@@ -213,7 +213,7 @@ main { max-width: 1080px; margin: 0 auto; padding: 18px 16px 60px; }
 @keyframes fade { from { opacity: 0 } }
 @keyframes pop { from { transform: scale(.92); opacity: 0 } }
 
-.toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 18px; border-radius: 12px; z-index: 60; animation: fade .2s; max-width: calc(100% - 32px); }
+.toast { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 14px 22px; border-radius: 14px; z-index: 60; animation: fade .2s; max-width: min(640px, calc(100% - 32px)); font-size: 19px; line-height: 1.4; cursor: pointer; box-shadow: 0 8px 30px rgba(0,0,0,.25); }
 
 /* Конфетти */
 #confetti { position: fixed; inset: 0; pointer-events: none; z-index: 70; }
@@ -253,7 +253,7 @@ footer { text-align: center; color: var(--muted); font-size: 14px; padding: 30px
   <button class="icon-btn" id="sound" title="Звуки вкл/выкл">🔔</button>
 </header>
 <main id="app"></main>
-<footer>Постразговор · игры к занятию «Разговоры о важном» 9 ноября 2026 года · работают без интернета · прогресс хранится только в этом браузере</footer>
+<footer>Постразговор · игры к занятию «Разговоры о важном» 9 ноября 2026 года · прогресс хранится только в этом браузере</footer>
 
 <script>
 /* Темы, возрастные группы и песни. Тексты можно менять здесь. */
@@ -390,8 +390,10 @@ const Sfx = {
 /* ---------- Озвучка (если в системе есть русский голос) ---------- */
 const Voice = {
   voice: null,
+  /* Озвучка отключена по просьбе автора: текст читает взрослый. Чтобы включить, поставьте ENABLED = true */
+  ENABLED: false,
   init() {
-    if (!("speechSynthesis" in window)) return;
+    if (!this.ENABLED || !("speechSynthesis" in window)) return;
     const choose = () => {
       const vs = speechSynthesis.getVoices();
       this.voice = vs.find(v => /ru/i.test(v.lang) && /irina|svetlana|milena|natalia|female/i.test(v.name)) || vs.find(v => /ru/i.test(v.lang)) || null;
@@ -444,8 +446,12 @@ function modal(content, { buttons = [{ text: "Понятно" }], onClose } = {}
     document.body.append(back);
   });
 }
-function toast(text, ms = 1800) {
-  const t = h("div", { class: "toast" }, text); document.body.append(t); setTimeout(() => t.remove(), ms);
+/* Подсказка внизу экрана. Висит тем дольше, чем длиннее текст (не меньше 4 секунд); закрывается по нажатию */
+function toast(text, ms = 0) {
+  document.querySelectorAll(".toast").forEach(x => x.remove());
+  const t = h("div", { class: "toast", title: "Нажмите, чтобы закрыть", onclick: () => t.remove() }, text);
+  document.body.append(t);
+  setTimeout(() => t.remove(), Math.max(ms, 4000 + String(text).length * 90));
 }
 
 /* ---------- Таймер ---------- */
@@ -496,14 +502,15 @@ function setupPlayers(stage, { min = 2, max = 6, def = 2, label = "Игроки"
     const box = h("div", { class: "players-setup stack" });
     const draw = () => {
       U.clear(box);
-      box.append(h("h2", { class: "center" }, label), note ? h("p", { class: "center muted" }, note) : null);
+      box.append(h("h2", { class: "center" }, label));
+      if (note) box.append(h("p", { class: "center muted" }, note));
       for (let i = 0; i < n; i++) {
         const inp = h("input", { value: names[i], maxlength: 24, "aria-label": `${noun} ${i + 1}`, oninput: e => names[i] = e.target.value });
         box.append(h("div", { class: "pl-row" }, h("span", { class: "em", style: { fontSize: "24px" } }, AVATARS[i]),
           h("span", { class: "swatch", style: { background: COLORS[i] } }), inp,
           n > min ? h("button", { class: "icon-btn", title: "Убрать", onclick: () => { names.splice(i, 1); names.push(`${noun} ${max}`); n--; draw(); } }, "✕") : null));
       }
-      if (n < max) box.append(h("button", { class: "btn ghost small", onclick: () => { n++; draw(); } }, `＋ Добавить (${noun.toLowerCase()})`));
+      if (n < max) box.append(h("button", { class: "btn ghost small", onclick: () => { n++; draw(); } }, "＋ Добавить " + ({ "Команда": "команду", "Игрок": "игрока" }[noun] || noun.toLowerCase())));
       if (extra) box.append(extra);
       box.append(h("div", { class: "row c" }, h("button", {
         class: "btn big", onclick: () => {
@@ -554,16 +561,17 @@ function finale(stage, { title, text, stars, facts = [], players, onAgain, hasht
 }
 
 /* Вопрос с вариантами. Возвращает Promise<boolean> */
-function askOptions(container, options, correct, { onPick, keys = true } = {}) {
+/* reveal: false — при ошибке не показывать верный ответ (например, пока его могут перехватить). disabled — номера вариантов, которые уже не выбрать */
+function askOptions(container, options, correct, { onPick, reveal = true, disabled = [] } = {}) {
   return new Promise(res => {
     const letters = "АБВГДЕ";
     let done = false;
     const btns = options.map((o, i) => h("button", {
-      class: "opt", onclick: () => choose(i),
+      class: "opt" + (disabled.includes(i) ? " wrong" : ""), disabled: disabled.includes(i), onclick: () => choose(i),
     }, h("span", { class: "k" }, letters[i]), o));
     const choose = i => {
       if (done) return; done = true;
-      btns.forEach((b, j) => { b.disabled = true; if (j === correct) b.classList.add("right"); });
+      btns.forEach((b, j) => { b.disabled = true; if (j === correct && (reveal || i === correct)) b.classList.add("right"); });
       if (i !== correct) { btns[i].classList.add("wrong"); Sfx.bad(); } else Sfx.ok();
       onPick && onPick(i);
       res(i === correct);
@@ -656,7 +664,7 @@ const App = {
     r.append(h("section", { class: "hero" },
       h("h1", null, "Постразговор"),
       h("p", null, "Игры к занятию «Разговоры о важном» 9 ноября 2026 года. Для каждой возрастной группы — три игры: «Я – сам», «Я с командой» (с друзьями, одноклассниками или однокурсниками) и «Я с семьёй»."),
-      h("div", { class: "tags" }, h("span", { class: "tag" }, "Работает без интернета"), h("span", { class: "tag" }, "24 игры"), h("span", { class: "tag" }, "Компьютер, планшет или телефон"))));
+      h("div", { class: "tags" }, h("span", { class: "tag" }, "24 игры"), h("span", { class: "tag" }, "Компьютер, планшет или телефон"))));
     for (const topic of TOPICS) {
       r.append(h("div", { class: "topic theme-" + topic.theme }, h("span", { class: "dot" }), h("h2", null, topic.title), h("span", { class: "muted" }, topic.sub)));
       r.append(h("div", { class: "groups theme-" + topic.theme }, GROUPS.filter(g => g.topic === topic.id).map(g =>
@@ -852,19 +860,20 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
       };
 
       const move = (dx, dy) => {
+        if (document.querySelector(".modal-back")) return;
         const x = px + dx, y = py + dy;
         if (!g[y] || g[y][x] !== 0) { board.classList.remove("shake"); void board.offsetWidth; board.classList.add("shake"); return; }
         px = x; py = y; steps++; Sfx.step();
         const it = items.find(i => !i.taken && i.x === x && i.y === y);
         if (it) {
           it.taken = true; got++; Sfx.ok();
-          toast(`${it.it[0]} Нашёл ${it.it[1]}! ${it.it[2]}`, 2600); Voice.say(`Нашёл ${it.it[1]}! ${it.it[2]}`);
+          modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji bounce" }, it.it[0]), h("h2", null, `Нашёл ${it.it[1]}!`), h("p", { style: { fontSize: "21px" } }, it.it[2])), { buttons: [{ text: "Дальше ▶" }] });
         }
         const f = fish.find(f => !f.taken && f.x === x && f.y === y);
         if (f) { f.taken = true; Sfx.tone(880, .1, "triangle"); }
         paint();
         if (x === W - 2 && y === H - 2) {
-          if (got < 2) { toast("Сначала найди оба предмета! 🔍"); Voice.say("Сначала найди оба предмета!"); Sfx.bad(); return; }
+          if (got < 2) { Sfx.bad(); modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji" }, "🔍"), h("h2", null, "Сначала найди оба предмета!"), h("p", { style: { fontSize: "21px" } }, "Посмотри наверху, что ещё осталось найти: " + items.filter(i => !i.taken).map(i => i.it[0] + " " + i.it[1]).join(", "))), { buttons: [{ text: "Ищу! ▶" }] }); return; }
           levelDone();
         }
       };
@@ -1010,6 +1019,21 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
     ["❓", "Задать вопрос"], ["🔥", "Печь, в которой плавят стекло"], ["🌊", "Море"], ["🐻", "Белый медведь"], ["🏛️", "Университет"],
     ["🧭", "Компас"], ["🥾", "Идти по сугробам"], ["🔔", "Звонок на урок"], ["🌙", "Ночь"], ["☀️", "Солнце"],
     ["🧮", "Считать"], ["🙋", "Поднять руку на уроке"], ["🏃", "Бежать догонять обоз"], ["🍞", "Есть хлеб"], ["💡", "Догадаться!"],
+    // ещё карточки
+    ["🧤", "Надеть варежки"], ["🧣", "Завязать шарф"], ["⛸️", "Кататься на коньках"], ["⛷️", "Ехать на лыжах"], ["☃️", "Лепить снеговика"],
+    ["🌨️", "Ловить снежинки"], ["🔥", "Греться у печки"], ["🪓", "Колоть дрова"], ["🪣", "Нести воду в вёдрах"], ["🧹", "Подметать пол"],
+    ["🐄", "Корова"], ["🐓", "Петух будит утром"], ["🐕", "Собака лает"], ["🐈", "Кошка умывается"], ["🦭", "Тюлень"],
+    ["🐋", "Кит"], ["🦢", "Лебедь"], ["🦉", "Сова"], ["🐺", "Волк воет"], ["🦊", "Лиса"],
+    ["🐿️", "Белка грызёт орех"], ["🐻", "Медведь просыпается"], ["🦌", "Олень"], ["🐇", "Заяц"], ["🦆", "Утка"],
+    ["⚓", "Бросить якорь"], ["🚣", "Грести вёслами"], ["🪝", "Ловить рыбу удочкой"], ["🧭", "Искать дорогу по компасу"], ["🗺️", "Смотреть на карту"],
+    ["🏔️", "Взбираться на гору"], ["🌲", "Ёлка"], ["🍄", "Собирать грибы"], ["🫐", "Собирать ягоды"], ["🌧️", "Дождь"],
+    ["🌈", "Радуга"], ["⚡", "Молния"], ["🌪️", "Вьюга"], ["🌅", "Рассвет"], ["🌠", "Падающая звезда"],
+    ["📚", "Нести стопку книг"], ["📏", "Измерять линейкой"], ["✂️", "Вырезать ножницами"], ["🖌️", "Рисовать кисточкой"], ["🧩", "Собирать пазл"],
+    ["🔍", "Рассматривать в лупу"], ["⚖️", "Взвешивать на весах"], ["🧪", "Смешивать в колбе"], ["🕯️", "Читать при свече"], ["📜", "Разворачивать свиток"],
+    ["🎒", "Собирать портфель"], ["🏫", "Идти в школу"], ["🛌", "Не хочется вставать"], ["🥱", "Зевать"], ["🤔", "Думать над задачей"],
+    ["😮", "Удивиться"], ["😢", "Расстроиться"], ["😄", "Обрадоваться"], ["🤝", "Помириться с другом"], ["👏", "Хлопать в ладоши"],
+    ["🎤", "Петь песню"], ["🥁", "Играть на барабане"], ["🎻", "Играть на скрипке"], ["💃", "Танцевать"], ["🎁", "Дарить подарок"],
+    ["🚂", "Паровоз"], ["⏰", "Будильник звонит"], ["🪞", "Смотреться в зеркало"], ["🧊", "Скользить по льду"], ["🌍", "Глобус крутится"],
   ];
 
   Games.register({
@@ -1070,50 +1094,62 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
   const COL = {
     blue: { name: "синий", hex: "#2846a8" },
     green: { name: "зелёный", hex: "#2f8f4e" },
-    teal: { name: "бирюзовый", hex: "#2bb3b1" },
+    teal: { name: "бирюзовый", hex: "#5cc6d0" },
     red: { name: "рубиновый", hex: "#b3123a" },
-    violet: { name: "фиолетовый", hex: "#6c3fa3" },
-    amber: { name: "жёлтый", hex: "#e0a526" },
-    white: { name: "белый", hex: "#f3f1ea" },
+    violet: { name: "фиолетовый", hex: "#7b4bb5" },
+    amber: { name: "жёлтый", hex: "#f0b429" },
+    white: { name: "белый", hex: "#f7f5ee" },
+    brown: { name: "коричневый", hex: "#8a5a32" },
+    black: { name: "чёрный", hex: "#23202a" },
     pink: { name: "бледно-розовый", hex: "#efc3cd", bad: true },
     clear: { name: "прозрачный зеленоватый", hex: "#cfe6d4", bad: true },
-    brown: { name: "мутно-бурый", hex: "#7a5a3a", bad: true },
+    murky: { name: "мутно-бурый", hex: "#9b8a6a", bad: true },
   };
   // Добавки: результат зависит от жара печи (обычный / сильный и долгий)
   const ADD = [
     { id: "none", name: "Без добавки", em: "🫙", res: ["clear", "clear"] },
     { id: "co", name: "Кобальт", em: "🔵", res: ["blue", "blue"], hint: "Кобальт даёт стеклу глубокий синий цвет — его видно даже в маленьком кусочке." },
-    { id: "cu", name: "Медь", em: "🟤", res: ["green", "teal"], hint: "Медь даёт зелёный цвет, а при сильном и долгом жаре стекло становится бирюзовым." },
+    { id: "cu", name: "Медь", em: "🟢", res: ["green", "teal"], hint: "Медь даёт зелёный цвет, а при сильном и долгом жаре стекло становится бирюзовым." },
     { id: "au", name: "Золото", em: "🟡", res: ["pink", "red"], hint: "Капля золота даёт рубиновый цвет, но только если стекло долго держать в сильном жаре. Иначе выйдет бледно-розовое." },
     { id: "mn", name: "Марганец", em: "🟣", res: ["violet", "violet"], hint: "Марганец окрашивает стекло в фиолетовый цвет." },
-    { id: "sb", name: "Сурьма", em: "⚪", res: ["amber", "brown"], hint: "Сурьма даёт жёлтую смальту. Если перегреть — цвет темнеет и мутнеет." },
+    { id: "sb", name: "Сурьма", em: "⚪", res: ["amber", "murky"], hint: "Сурьма даёт жёлтую смальту. Если перегреть — цвет темнеет и мутнеет." },
     { id: "sn", name: "Олово", em: "🥈", res: ["white", "white"], hint: "Олово делает стекло белым и непрозрачным — такую смальту называют «глухой»." },
+    { id: "fe", name: "Железо", em: "🟤", res: ["brown", "black"], hint: "Железо даёт коричневое стекло, а если добавить его много и долго держать в жаре — почти чёрное." },
   ];
-  // Мозаики (12×12). Буква — цвет: b синий, g зелёный, t бирюзовый, r рубиновый, v фиолетовый, a жёлтый, w белый
+  // Мозаики 16×16. Буква — цвет: b синий, g зелёный, t бирюзовый, r рубиновый, v фиолетовый, a жёлтый, w белый, n коричневый, k чёрный
   const PICS = [
-    {
-      title: "Парусник на Белом море", em: "⛵",
-      fact: "Ломоносов вырос у Белого моря и с детства ходил с отцом на парусном судне.",
+    { title: "Парусник на Белом море", em: "⛵", fact: "Ломоносов вырос у Белого моря и с детства ходил с отцом на парусном судне.",
       rows: [
-        "tttttttttaat", "tttttwtttaat", "ttttwwtttttt", "tttwwwwttttt", "ttwwwwwttttt", "twwwwwwttttt",
-        "tttttrtttttt", "trrrrrrrrrtt", "ttrrrrrrrttt", "bbbbbbbbbbbb", "bbtbbbbbtbbb", "bbbbbbbbbbbb"],
-    },
-    {
-      title: "Венера на фоне Солнца", em: "🔭",
-      fact: "В 1761 году Ломоносов увидел светлый ободок вокруг Венеры и догадался: у планеты есть атмосфера.",
+        "tttttttttttttttt", "ttttttttkrrtaatt", "ttttttttkrtaaaat", "tttttttwkttaaaat",
+        "ttttttwwkwttaatt", "tttttwwwkwwttttt", "ttttwwwwkwwwtttt", "tttwwwwwkwwwwttt",
+        "ttwwwwwwkwwwwttt", "twwwwwwwkwwwwttt", "tnnnnannannannnt", "tttnnnnnnnnnnttt",
+        "bbbbbbbbbbbbbbbb", "bwwbbbbbbbbwwbbb", "bbbbbbwwbbbbbbbb", "bbbwbbbbbbbbbbwb"] },
+    { title: "Венера на фоне Солнца", em: "🔭", fact: "В 1761 году Ломоносов увидел светлый ободок вокруг Венеры и догадался: у планеты есть атмосфера.",
       rows: [
-        "vvvvvvvvvvvv", "vvvaaaaaavvv", "vvaaaaaaaavv", "vaaaaaaaaaav", "vaaaawwwaaav", "vaaawbbbwaav",
-        "vaaawbbbwaav", "vaaaawwwaaav", "vaaaaaaaaaav", "vvaaaaaaaavv", "vvvaaaaaavvv", "vvvvvvvvvvvv"],
-    },
-    {
-      title: "Северное сияние", em: "🌌",
-      fact: "Ломоносов изучал северное сияние и написал о нём знаменитые стихи: «Открылась бездна звёзд полна; Звездам числа нет, бездне дна».",
+        "wkkkkkkkkkkkkkkk", "kkkkkkkkkkkkkkwk", "kkkkkrrrrrrkkkkk", "kkwkraaaaaarkkkk",
+        "kkkraaaaaaaarkkk", "kkraaaaaaaaaarkk", "kkraaaaaaaaaarkw", "kraaaaaaaaaaaark",
+        "kraaaaaaawwaaark", "kraaaaaawvvwaark", "kkraaaaawvvwarkk", "kkraaaaaawwaarkk",
+        "kkkraaaaaaaarkkk", "kkkkraaaaaarkkkw", "kwkkkrrrrrrkkkkk", "kkkkkkkkkkkkkwkk"] },
+    { title: "Северное сияние над домом", em: "🌌", fact: "Ломоносов изучал северное сияние и написал о нём знаменитые стихи: «Открылась бездна звёзд полна; Звездам числа нет, бездне дна».",
       rows: [
-        "bbbbbbbbbbbb", "bbgbbbbbbwbb", "bggtbbbbbbbb", "bbgttbbbvbbb", "bbbgttbvvbbb", "bwbbgttvbbbb",
-        "bbbbbgtvbbwb", "bbbbbbggbbbb", "wwwwwwwwwwww", "wwrrwwwwwwww", "wrrrrwwwwwww", "wwrrwwwwwwww"],
-    },
+        "bwbbbbbbbbbbwbbb", "bbbbbbwbbbggbbbb", "bbbbbbbbggttggwb", "gbbbbbbgttbbttgb",
+        "tggbbggtbbbbbbtg", "bttvvvvvbbbbbbbv", "bbvttbbbvbbbbvvb", "vvbbbbbbbvvvvbbb",
+        "bbbbbbbbbbbbbwbb", "bbwbbbbrbbbbbgbb", "bbbbbbrrrbbbgggb", "bbbbbrrrrrbggggg",
+        "bbbbrrrrrrrbbnbb", "wwwwbnanknbwwwww", "wwwwwnnnknwwwwww", "wwwwwwwwwwwwwwww"] },
+    { title: "Белый медведь на льдине", em: "🐻‍❄️", fact: "Белые медведи живут на берегах Белого и других северных морей — там, где рос Ломоносов.",
+      rows: [
+        "tttttttttttttttt", "taaatttttttttttt", "taaatttttttttttt", "taaatttttttttttt",
+        "tttttttttttttttt", "tttttttttttwtttt", "ttttttwwtttwkwtt", "tttwwwwwwwwwwwkt",
+        "ttwwwwwwwwwwwwwt", "ttwwwwwwwwwwtttt", "tttwwwwwwwwttttt", "tttwwtwwwwtttttt",
+        "wwwwwwwwwwwwwwww", "bwwwwwwwwwwwwwbb", "bbbbtbbbbbbbbbtb", "bbbbbbbbbbtbbbbb"] },
+    { title: "Рыба из обоза", em: "🐟", fact: "В Москву Ломоносов ушёл вместе с обозом, который вёз на продажу мороженую рыбу.",
+      rows: [
+        "bbbbbbbbbbbbbbbb", "bbbbtbbbbbbbbbbb", "bbbtbbbbbbbtbbbb", "bbbbbbbbbbtbbbbb",
+        "bbbbbbbbbbbbbbbb", "bbbbbrrarrbbnbbb", "bbbrrrarrarrnnbb", "bbbrkwrrarrrnnnb",
+        "bbrrrrrarrrrnnnn", "bbbrrrarrarrnnnb", "bbbrrarrarrrnnbb", "bbbbbrrarrbbnbbb",
+        "bbbbbbbbbbbbbbbb", "bbtgbbbbbbbbbbbg", "bgbbbbbbbbbbtbgb", "gggggggggggggggg"] },
   ];
-  const LET = { b: "blue", g: "green", t: "teal", r: "red", v: "violet", a: "amber", w: "white" };
+  const LET = { b: "blue", g: "green", t: "teal", r: "red", v: "violet", a: "amber", w: "white", n: "brown", k: "black" };
 
   Games.register({
     id: "glass", group: "3-4", mode: "solo", emoji: "⚗️", title: "Стекольная мастерская",
@@ -1123,19 +1159,23 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
       "Выбери мозаику. Посмотри, какие цвета смальты для неё нужны.",
       "В мастерской выбери добавку и жар печи, нажми «Плавить». Получится стекло какого-то цвета.",
       "Все опыты записываются в журнал. Не вышло — попробуй иначе: другую добавку или другой жар.",
-      "Когда все нужные цвета готовы, собери мозаику: выбери цвет и нажимай на клетки с его номером.",
+      "Когда все нужные цвета готовы, собери мозаику по номерам: выбери цвет и нажимай на клетки с его номером — сразу всю область или по одной клетке.",
       "Чем меньше опытов понадобилось, тем больше звёзд.",
       "Химия в игре упрощена: в настоящей мастерской цвет зависел ещё от состава стекла, количества добавки и многих других условий.",
     ],
     start(stage, ctx) {
       let pic, need, made = new Set(), journal = [];
 
+      const LIGHT = ["white", "amber", "teal"];
+      const thumb = (rows, size = 6) => h("div", { style: { display: "grid", gridTemplateColumns: `repeat(16, ${size}px)`, gridAutoRows: size + "px", margin: "0 auto", borderRadius: "6px", overflow: "hidden", width: "fit-content" } },
+        rows.join("").split("").map(l => h("span", { style: { background: COL[LET[l]].hex } })));
       const choosePic = () => {
         U.clear(stage).append(h("div", { class: "center stack" },
           h("h2", null, "Какую мозаику соберём?"),
-          h("p", { class: "muted" }, "В мастерской Ломоносова мозаики собирали из смальты — кусочков цветного непрозрачного стекла. Сначала стекло нужно сварить!"),
-          h("div", { class: "row c" }, PICS.map(p => h("button", { class: "btn ghost big", style: { flexDirection: "column", minWidth: "200px" }, onclick: () => { pic = p; lab(); } },
-            h("span", { class: "em", style: { fontSize: "44px" } }, p.em), p.title)))));
+          h("p", { class: "muted" }, "В мастерской Ломоносова мозаики собирали из смальты — кусочков цветного непрозрачного стекла. Сначала стекло нужно сварить, а потом — выложить картину по номерам!"),
+          h("div", { class: "row c" }, PICS.map(p => h("button", { class: "btn ghost", style: { flexDirection: "column", width: "190px", padding: "14px" }, onclick: () => { pic = p; lab(); } },
+            thumb(p.rows, 7), h("span", { style: { marginTop: "8px" } }, p.title),
+            h("span", { class: "small muted" }, `цветов: ${new Set(p.rows.join("")).size}`))))));
       };
 
       const lab = () => {
@@ -1151,7 +1191,7 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
         const toMosaic = h("button", { class: "btn big ok hidden", onclick: () => mosaic() }, "🧩 Собирать мозаику");
 
         const drawNeed = () => U.clear(needBox).append(need.map(c => h("span", {
-          class: "pill", style: { background: made.has(c) ? COL[c].hex : "#fff", color: made.has(c) && !["white", "amber"].includes(c) ? "#fff" : "var(--ink)", border: "2px solid " + COL[c].hex },
+          class: "pill", style: { background: made.has(c) ? COL[c].hex : "#fff", color: made.has(c) && !LIGHT.includes(c) ? "#fff" : "var(--ink)", border: "2px solid " + COL[c].hex },
         }, (made.has(c) ? "✓ " : "") + COL[c].name)));
         const drawAdd = () => U.clear(addBox).append(ADD.map(a => h("button", {
           class: "btn small " + (a === add ? "" : "ghost"), onclick: () => { add = a; drawAdd(); Sfx.click(); },
@@ -1197,46 +1237,71 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
 
       const mosaic = () => {
         const cols = [...need];
-        let cur = cols[0];
+        let cur = cols[0], mode = "fill", painting = false;
         const grid = pic.rows.map(r => r.split("").map(l => ({ c: LET[l], done: false })));
         const num = c => cols.indexOf(c) + 1;
-        const N = 12, ts = U.clamp(Math.floor((stage.clientWidth - 60) / N), 22, 40);
-        const board = h("div", { style: { display: "grid", gridTemplateColumns: `repeat(${N}, ${ts}px)`, gap: "2px", justifyContent: "center", background: "#cfc6b6", padding: "6px", borderRadius: "12px", width: "fit-content", margin: "0 auto" } });
+        const N = 16, ts = U.clamp(Math.floor((stage.clientWidth - 50) / N) - 2, 18, 38);
+        const board = h("div", { style: { display: "grid", gridTemplateColumns: `repeat(${N}, ${ts}px)`, gap: "2px", justifyContent: "center", background: "#cfc6b6", padding: "6px", borderRadius: "12px", width: "fit-content", margin: "0 auto", touchAction: "none", userSelect: "none" } });
         const cellsEl = [];
         grid.forEach((row, y) => row.forEach((cell, x) => {
-          const el = h("button", { style: { width: ts + "px", height: ts + "px", border: 0, borderRadius: "4px", background: "#fffaf1", fontSize: Math.round(ts * .42) + "px", color: "#8a7f70", cursor: "pointer", padding: 0 }, onclick: () => tap(x, y) }, num(cell.c));
+          const el = h("div", { "data-x": x, "data-y": y, style: { width: ts + "px", height: ts + "px", borderRadius: "3px", background: "#fffaf1", fontSize: Math.round(ts * .5) + "px", fontWeight: 650, color: "#8a7f70", cursor: "pointer", display: "grid", placeItems: "center", lineHeight: 1 } }, num(cell.c));
           cellsEl.push(el); board.append(el);
         }));
+        const left = h("span", { class: "pill" });
         const palette = h("div", { class: "row c" });
-        const drawPal = () => U.clear(palette).append(cols.map(c => h("button", {
-          class: "btn small", style: { background: COL[c].hex, color: ["white", "amber"].includes(c) ? "#222" : "#fff", outline: c === cur ? "4px solid var(--ink)" : "none", outlineOffset: "2px" },
-          onclick: () => { cur = c; drawPal(); },
-        }, `${num(c)} · ${COL[c].name}`)));
+        const modeBox = h("div", { class: "row c" });
+        const remain = c => grid.flat().filter(x => !x.done && x.c === c).length;
+        const drawPal = () => {
+          U.clear(palette).append(cols.map(c => h("button", {
+            class: "btn small", style: { background: COL[c].hex, color: LIGHT.includes(c) ? "#222" : "#fff", outline: c === cur ? "4px solid var(--ink)" : "none", outlineOffset: "2px", opacity: remain(c) ? 1 : .45 },
+            onclick: () => { cur = c; drawPal(); highlight(); },
+          }, `${num(c)} · ${COL[c].name}` + (remain(c) ? "" : " ✓"))));
+          left.textContent = `Осталось клеток: ${grid.flat().filter(x => !x.done).length}`;
+        };
+        const drawMode = () => U.clear(modeBox).append([["fill", "🪣 Закрашивать всю область"], ["cell", "✏️ По одной клетке"]].map(([m, t]) =>
+          h("button", { class: "btn small " + (mode === m ? "dark" : "ghost"), onclick: () => { mode = m; drawMode(); } }, t)));
+        // подсвечиваем клетки выбранного цвета, чтобы их было легко найти
+        const highlight = () => grid.forEach((row, y) => row.forEach((cell, x) => {
+          if (cell.done) return;
+          const el = cellsEl[y * N + x];
+          el.style.background = cell.c === cur ? "#fff0c2" : "#fffaf1"; el.style.color = cell.c === cur ? "var(--ink)" : "#8a7f70";
+        }));
+        const paint = (x, y) => {
+          const cell = grid[y][x]; cell.done = true;
+          const el = cellsEl[y * N + x]; el.style.background = COL[cell.c].hex; el.textContent = ""; el.style.boxShadow = "inset 0 0 0 1px #0001, inset 2px 2px 0 #fff4";
+        };
         const fillRegion = (x, y) => {
-          const c = grid[y][x].c, st = [[x, y]]; let n = 0;
+          const c = grid[y][x].c, st = [[x, y]];
           while (st.length) {
             const [a, b] = st.pop(); const cell = grid[b] && grid[b][a];
             if (!cell || cell.done || cell.c !== c) continue;
-            cell.done = true; n++;
-            const el = cellsEl[b * N + a]; el.style.background = COL[c].hex; el.textContent = ""; el.style.boxShadow = "inset 0 0 0 1px #0001, inset 2px 2px 0 #fff3";
-            st.push([a + 1, b], [a - 1, b], [a, b + 1], [a, b - 1]);
+            paint(a, b); st.push([a + 1, b], [a - 1, b], [a, b + 1], [a, b - 1]);
           }
-          return n;
         };
-        const tap = (x, y) => {
+        let warned = 0;
+        const tap = (x, y, fromDrag) => {
           const cell = grid[y][x]; if (cell.done) return;
-          if (cell.c !== cur) { Sfx.bad(); toast(`Здесь номер ${num(cell.c)} — нужен ${COL[cell.c].name} цвет`); return; }
-          fillRegion(x, y); Sfx.tone(500 + Math.random() * 400, .08, "triangle", .1);
+          if (cell.c !== cur) {
+            if (!fromDrag && Date.now() - warned > 1500) { warned = Date.now(); Sfx.bad(); toast(`Здесь номер ${num(cell.c)} — нужен ${COL[cell.c].name} цвет`); }
+            return;
+          }
+          mode === "fill" ? fillRegion(x, y) : paint(x, y);
+          Sfx.tone(500 + Math.random() * 400, .06, "triangle", .08);
+          drawPal();
           if (grid.every(r => r.every(c => c.done))) done();
         };
+        const cellAt = e => { const el = document.elementFromPoint(e.clientX, e.clientY); return el && el.dataset && el.dataset.x != null ? el : null; };
+        board.addEventListener("pointerdown", e => { const el = cellAt(e); if (!el) return; painting = true; tap(+el.dataset.x, +el.dataset.y, false); });
+        board.addEventListener("pointermove", e => { if (!painting || mode !== "cell") return; const el = cellAt(e); if (el) tap(+el.dataset.x, +el.dataset.y, true); });
+        const stop = () => painting = false;
+        addEventListener("pointerup", stop); ctx.onCleanup(() => removeEventListener("pointerup", stop));
         const done = () => {
           const extra = journal.length - need.length;
-          const stars = extra <= 2 ? 3 : extra <= 6 ? 2 : 1;
-          const art = board.cloneNode(true); art.querySelectorAll("button").forEach(b => b.disabled = true);
+          const stars = extra <= 3 ? 3 : extra <= 8 ? 2 : 1;
           finale(stage, {
             stars, title: `Мозаика «${pic.title}» готова!`,
-            text: `Тебе понадобилось опытов: ${journal.length}. ${extra <= 2 ? "Почти без ошибок — как настоящий мастер!" : "Каждая неудача подсказывала, что поменять. Так и работают исследователи."}`,
-            extra: art,
+            text: `Тебе понадобилось опытов: ${journal.length}. ${extra <= 3 ? "Почти без ошибок — как настоящий мастер!" : "Каждая неудача подсказывала, что поменять. Так и работают исследователи."}`,
+            extra: thumb(pic.rows, U.clamp(Math.floor((stage.clientWidth - 40) / 16), 12, 26)),
             facts: [
               `<b>Ты знаешь?</b> ${pic.fact}`,
               "<b>Мозаика «Полтавская баталия»</b> из мастерской Ломоносова — огромная картина площадью около 30 квадратных метров. Её собрали из тысяч кусочков смальты.",
@@ -1247,9 +1312,9 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
         };
         U.clear(stage).append(h("div", { class: "stack center" },
           h("h2", null, "Собери мозаику «" + pic.title + "»"),
-          h("p", { class: "muted" }, "Выбери цвет и нажимай на клетки с его номером — закрасится вся область сразу."),
-          palette, board));
-        drawPal();
+          h("p", { class: "muted" }, "Выбери цвет — его клетки подсветятся. Нажимай на клетки с этим номером. В режиме «По одной клетке» можно вести пальцем или мышкой."),
+          modeBox, palette, left, board));
+        drawMode(); drawPal(); highlight();
       };
 
       choosePic();
@@ -1779,8 +1844,10 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
     players: "2–6 игроков", time: "15–20 минут",
     rules: [
       "Один читает подсказки вслух (или все смотрят на экран). Подсказки открываются по одной.",
-      "Кто догадался — кричит ответ. Если верно, нажмите его имя: очков столько, сколько подсказок ещё не открыто, плюс одно.",
-      "Ошибся — пропускаешь эту карточку, остальные играют дальше.",
+      "Кто догадался — ничего не говорит вслух, а нажимает своё имя под словами «Знаю ответ!».",
+      "Важно: в этот момент на экран смотрит только тот, кто отвечает. Все остальные отворачиваются — ведь если он ошибётся, они продолжат угадывать эту карточку.",
+      "Отвечающий сверяет свой ответ с экраном. Угадал — очков столько, сколько подсказок ещё не открыто, плюс одно, и ответ видят все.",
+      "Ошибся — больше не участвует в этой карточке, остальные поворачиваются и играют дальше.",
       "10 карточек. Побеждает тот, у кого больше очков.",
     ],
     async start(stage, ctx) {
@@ -1806,10 +1873,20 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
           }, p.avatar + " " + p.name)));
         };
         const guessed = async i => {
-          const v = await modal(h("div", { class: "center stack" }, h("h2", null, `${players[i].name} отвечает`), h("p", null, "Правильно?"), h("div", { class: "big-emoji" }, c.em), h("div", { class: "title-xl" }, c.a)),
-            { buttons: [{ text: "✓ Верно", value: true, cls: "ok" }, { text: "✗ Нет", value: false, cls: "bad" }] });
-          if (v) { players[i].score += 6 - open; Sfx.ok(); reveal(players[i]); }
-          else { out.add(i); Sfx.bad(); if (out.size === players.length) reveal(null); else draw(); }
+          const p = players[i];
+          const go = await modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji" }, "🙈"),
+            h("h2", null, `Все, кроме ${p.name}, отвернитесь от экрана!`),
+            h("p", null, `${p.avatar} ${p.name}, задумай ответ и посмотри, совпал ли он. Если ошибёшься, остальные продолжат угадывать эту карточку — поэтому им смотреть нельзя.`)),
+            { buttons: [{ text: `Показать ответ (смотрит только ${p.name})`, value: true }, { text: "Отмена", value: false, cls: "ghost" }] });
+          if (!go) return;
+          const v = await modal(h("div", { class: "center stack" }, h("p", { class: "muted" }, `Смотрит только ${p.name}`), h("div", { class: "big-emoji" }, c.em), h("div", { class: "title-xl" }, c.a), h("p", null, "Твой ответ совпал?")),
+            { buttons: [{ text: "✓ Да, угадал(а)", value: true, cls: "ok" }, { text: "✗ Нет", value: false, cls: "bad" }] });
+          if (v) { p.score += 6 - open; Sfx.ok(); reveal(p); return; }
+          out.add(i); Sfx.bad();
+          if (out.size === players.length) return reveal(null);
+          await modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji" }, "👀"), h("h2", null, "Можно поворачиваться!"),
+            h("p", null, `${p.name} ошибся(лась) и больше не отвечает на эту карточку. Остальные угадывают дальше.`)), { buttons: [{ text: "Играем дальше ▶" }] });
+          draw();
         };
         const reveal = async p => {
           await modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji bounce" }, c.em), h("h2", null, c.a),
@@ -1821,7 +1898,7 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
           h("div", { class: "row", style: { justifyContent: "space-between" } }, h("b", null, `Карточка ${n} из ${deck.length}`), pts),
           h("div", { class: "panel" }, list),
           h("div", { class: "row c" }, more, Voice.button(() => c.hints[open - 1]), h("button", { class: "btn ghost", onclick: () => reveal(null) }, "Показать ответ")),
-          h("p", { class: "center muted small" }, "Кто угадал?"), who));
+          h("p", { class: "center", style: { fontWeight: 700 } }, "Знаю ответ! (нажми своё имя)"), who));
         draw();
       };
       next();
@@ -1906,7 +1983,7 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
         used.add(ci + ":" + vi);
         const [q, opts, right, note] = BOARD[ci].qs[vi], val = VAL[vi];
         const order = U.shuffle(opts.map((_, i) => i));
-        let answering = turn, stolen = false;
+        let answering = turn, stolen = false, wrongPick = [];
         const timer = new Timer(30, { onEnd: () => toast("Время! Выбирайте ответ") });
         const head = h("h3", { class: "center" });
         const box = h("div", { class: "stack", style: { maxWidth: "720px", margin: "0 auto" } });
@@ -1914,7 +1991,8 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
         const drawHead = () => { const t = teams[answering]; head.textContent = `${stolen ? "Перехват! " : ""}Отвечает ${t.avatar} «${t.name}» · ${stolen ? val / 2 : val}`; head.style.color = t.color; };
         const askRound = () => {
           U.clear(box).append(h("div", { class: "pill" }, `${BOARD[ci].cat} · ${val}`), h("h2", null, q));
-          askOptions(box, order.map(i => opts[i]), order.indexOf(right)).then(ok => {
+          // при первой ошибке верный ответ не показываем: соперники могут перехватить вопрос
+          askOptions(box, order.map(i => opts[i]), order.indexOf(right), { reveal: stolen, disabled: wrongPick, onPick: k => { if (!stolen) wrongPick = [k]; } }).then(ok => {
             timer.stop();
             const t = teams[answering], pts = stolen ? val / 2 : val;
             if (ok) { t.score += pts; done(`+${pts} команде «${t.name}»`); }
@@ -1928,6 +2006,7 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
           });
         };
         const done = msg => {
+          [...box.querySelectorAll(".opt")].forEach((b, k) => { b.disabled = true; if (k === order.indexOf(right)) b.classList.add("right"); });
           U.clear(after).append(h("div", { class: "fact" }, h("b", null, "Ответ: " + opts[right] + ". "), note), h("p", null, msg),
             h("button", { class: "btn big", onclick: () => { turn = (turn + 1) % teams.length; drawBoard(); } }, "К табло ▶"));
         };
@@ -1963,7 +2042,7 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
     { y: 1747, who: "🧱 Стройка лаборатории", text: "Лабораторию разрешили построить, но денег выделили мало.",
       L: { t: "Строить сразу всё по большому проекту", e: { m: -3, n: 2 }, ms: "lab" }, R: { t: "Начать с главного: печи, весы, посуда", e: { m: -1, n: 1 }, ms: "lab" } },
     { y: 1749, who: "🧑‍🎓 Студенты", text: "Студенты просят: «Покажите химию на практике, а не только в книгах».",
-      L: { t: "Пустить их в лабораторию и учить на опытах", e: { p: 2, s: -1, n: 1 } }, R: { t: "Нет времени — пусть читают учебники", e: { p: -1, n: 1 } } },
+      L: { t: "Пустить их в лабораторию и учить на опытах", e: { p: 2, n: 1 } }, R: { t: "Нет времени — пусть читают учебники", e: { p: -1, n: 1 } } },
     { y: 1750, who: "🔥 Рубиновое стекло", text: "Красное стекло никак не выходит: то бледное, то мутное.",
       L: { t: "Поменять материал: попробовать золото", e: { n: 2, m: -1 } }, R: { t: "Поменять режим: держать в печи дольше", e: { n: 1, s: -1 } } },
     { y: 1751, who: "🔁 Сотни плавок", text: "Снова неудача. Опытов уже сотни, а точного рецепта всё нет.",
@@ -1975,7 +2054,7 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
     { y: 1753, who: "⚡ Гроза", text: "Ваш коллега Георг Рихман погиб при опыте с атмосферным электричеством. Некоторые требуют запретить такие исследования.",
       L: { t: "Защищать исследования и выступить с докладом", e: { n: 2, p: -1 } }, R: { t: "Прекратить опыты от греха подальше", e: { n: -2, p: 1 } } },
     { y: 1753, who: "🏭 Своя фабрика", text: "Вам дали землю в Усть-Рудице под фабрику цветного стекла. Как перенести рецепты из лаборатории в производство?",
-      L: { t: "Отдать мастерам рецепты как есть", e: { m: 1 }, f: "noTest", ms: "factory" }, R: { t: "Сначала пробные партии и обучение мастеров", e: { m: -2, n: 1 }, ms: "factory" } },
+      L: { t: "Отдать мастерам рецепты как есть", e: { m: 1 }, f: "noTest", ms: "factory" }, R: { t: "Сначала пробные партии и обучение мастеров", e: { m: -1, n: 1 }, ms: "factory" } },
     { y: 1754, who: "🧵 Брак", need: "noTest", text: "Первая большая партия бисера вышла с браком: цвет «гуляет». Заказчики недовольны.",
       L: { t: "Найти причину и переписать технологию", e: { m: -2, n: 2, s: -1 } }, R: { t: "Продать как есть", e: { m: 1, p: -3 } } },
     { y: 1754, who: "🚁 Аэродинамическая машина", text: "Вы придумали модель с двумя винтами, которая должна поднимать вверх приборы для наблюдения за погодой.",
@@ -2113,26 +2192,26 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
 "use strict";
 (() => {
   const CARDS = [
-    { y: 1754, em: "🚁", title: "Аэродинамическая машина", text: "Модель с двумя винтами, которые вращаются в разные стороны от заводной пружины. Её задумали, чтобы поднимать вверх приборы для наблюдения за погодой.",
-      q: "На что из современного это похоже?", o: ["Вертолёт и квадрокоптер", "Воздушный шар", "Парашют", "Планер"], a: 0, note: "Модель Ломоносова считают одним из первых прообразов вертолёта." },
+    { y: 1754, em: "🌀", title: "Модель на заводной пружине", text: "Летом 1754 года Ломоносов показал Академии небольшую модель с заводной пружиной. По его замыслу она должна была сама подняться в воздух и унести вверх термометр и другие приборы для наблюдения за погодой.",
+      q: "Прообразом чего считают эту модель?", o: ["Вертолёта", "Дирижабля", "Метеозонда", "Воздушного змея"], a: 0, note: "Ломоносов назвал её «аэродинамической машиной». У неё было два винта, вращавшихся в разные стороны, — так устроены соосные вертолёты. Её считают одним из первых прообразов вертолёта." },
     { y: 1756, em: "🔭", title: "«Ночезрительная труба»", text: "Зрительная труба с большим объективом, которая собирает больше света. Ломоносов задумал её, чтобы «различать в ночное время скалы и корабли».",
-      q: "Что сегодня решает ту же задачу?", o: ["Светосильный бинокль и приборы для наблюдения в темноте", "Микроскоп", "Калейдоскоп", "Лупа"], a: 0, note: "Задача та же: увидеть больше, когда света мало." },
+      q: "Что сегодня решает ту же задачу?", o: ["Прибор ночного видения", "Перископ подводной лодки", "Прожектор маяка", "Морской дальномер"], a: 0, note: "Задача та же: увидеть больше, когда света мало." },
     { y: 1748, em: "⚖️", title: "Письмо Леонарду Эйлеру", text: "«…сколько чего у одного тела отнимется, столько присовокупится к другому…» — писал Ломоносов.",
-      q: "Какой закон он описывает?", o: ["Закон сохранения массы вещества", "Закон всемирного тяготения", "Закон Ома", "Закон Архимеда"], a: 0, note: "Позже, в 1756 году, Ломоносов проверял эту мысль опытами с запаянными сосудами." },
+      q: "Какой закон он описывает?", o: ["Закон сохранения массы", "Закон всемирного тяготения", "Закон Архимеда", "Закон отражения света"], a: 0, note: "Позже, в 1756 году, Ломоносов проверял эту мысль опытами с запаянными сосудами." },
     { y: 1763, em: "🧊", title: "Путь по северным морям", text: "Ломоносов написал о том, что можно пройти по Северному Ледовитому океану вдоль берегов Сибири на восток — к Тихому океану и в Индию.",
       q: "Как это называется сегодня?", o: ["Северный морской путь", "Транссибирская магистраль", "Суэцкий канал", "Великий шёлковый путь"], a: 0, note: "По проекту Ломоносова уже после его смерти отправилась экспедиция Василия Чичагова." },
     { y: 1750, em: "🔥", title: "О причине теплоты и холода", text: "Ломоносов утверждал, что теплота — это не особая невесомая жидкость, как думали многие, а движение мельчайших частиц вещества.",
       q: "Какая современная теория с этим совпадает?", o: ["Молекулярно-кинетическая теория", "Теория относительности", "Теория теплорода", "Теория большого взрыва"], a: 0, note: "Теорию «теплорода» Ломоносов как раз оспаривал." },
     { y: 1763, em: "🟠", title: "Загадка янтаря", text: "В те времена спорили, откуда берётся янтарь. Ломоносов привёл доказательства, наблюдая насекомых и травинки внутри кусочков.",
-      q: "Что такое янтарь по Ломоносову?", o: ["Окаменевшая смола древних деревьев", "Застывшая морская пена", "Вещество из метеоритов", "Окаменевший мёд"], a: 0, note: "Так и есть: янтарь — ископаемая смола хвойных деревьев." },
+      q: "Что такое янтарь по Ломоносову?", o: ["Окаменевшая смола деревьев", "Застывшая морская соль", "Осколки упавших метеоритов", "Особый вид горного хрусталя"], a: 0, note: "Так и есть: янтарь — ископаемая смола хвойных деревьев." },
     { y: 1763, em: "🌱", title: "«О слоях земных»", text: "В этом труде Ломоносов объяснил, откуда взялась самая плодородная почва — чернозём.",
-      q: "Как, по Ломоносову, образовался чернозём?", o: ["Из перегнивших остатков растений и животных", "Из вулканического пепла", "Из морского ила", "Он был всегда"], a: 0, note: "Спустя больше ста лет почвовед Василий Докучаев отмечал, что Ломоносов уже изложил эту теорию." },
+      q: "Как, по Ломоносову, образовался чернозём?", o: ["Из остатков растений и животных", "Из пепла древних вулканов", "Из ила высохших морей", "Из размолотой ледником глины"], a: 0, note: "Спустя больше ста лет почвовед Василий Докучаев отмечал, что Ломоносов уже изложил эту теорию." },
     { y: 1758, em: "🗣️", title: "Три «штиля»", text: "В «Предисловии о пользе книг церковных в российском языке» Ломоносов предложил разделять слова и жанры на высокий, средний и низкий «штиль» — для од, для научных текстов и писем, для комедий и бытовой речи.",
-      q: "На что это похоже сегодня?", o: ["Стили речи: книжный, нейтральный, разговорный", "Три времени глагола", "Три склонения", "Три части книги"], a: 0, note: "Мы до сих пор выбираем слова по ситуации — так же, как учил Ломоносов." },
+      q: "На что это похоже сегодня?", o: ["Стили речи", "Времена глагола", "Типы склонения", "Части речи"], a: 0, note: "Мы до сих пор выбираем слова по ситуации — так же, как учил Ломоносов." },
     { y: 1753, em: "⚡", title: "«Громовая машина»", text: "Вместе с Георгом Рихманом Ломоносов проводил опыты с железным шестом на крыше и прибором в доме.",
-      q: "Что они изучали?", o: ["Электричество грозовых облаков", "Землетрясения", "Магнитное поле Земли", "Силу ветра"], a: 0, note: "Опыты были опасны: Рихман погиб от удара молнии во время наблюдения." },
+      q: "Что они изучали?", o: ["Электричество в грозовых облаках", "Подземные толчки при землетрясениях", "Магнитное поле нашей планеты", "Силу и направление ветра"], a: 0, note: "Опыты были опасны: Рихман погиб от удара молнии во время наблюдения." },
     { y: 1753, em: "🏭", title: "Фабрика в Усть-Рудице", text: "Под Петербургом Ломоносов построил свою фабрику, чтобы перенести рецепты из лаборатории в производство.",
-      q: "Что выпускала фабрика?", o: ["Смальту, бисер и стеклярус", "Фарфоровую посуду", "Бумагу", "Порох"], a: 0, note: "Из смальты фабрики собирали мозаики, в том числе «Полтавскую баталию»." },
+      q: "Что выпускала фабрика?", o: ["Смальту, бисер и стеклярус", "Фарфор, фаянс и изразцы", "Бумагу, картон и обои", "Порох, фитили и ракеты"], a: 0, note: "Из смальты фабрики собирали мозаики, в том числе «Полтавскую баталию»." },
     { y: 1761, em: "🌟", title: "Правда или миф?", text: "«Наблюдая Венеру в 1761 году, Ломоносов сделал вывод, что у неё есть атмосфера».",
       q: "Как вы думаете?", o: ["Правда", "Миф"], a: 0, note: "Наблюдая прохождение Венеры по диску Солнца, он заметил светлый ободок и объяснил его атмосферой." },
     { y: 1762, em: "🔭", title: "Правда или миф?", text: "«Ломоносов изобрёл телескоп».",
@@ -2265,7 +2344,10 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
           await new Promise(res => {
             U.clear(stage).append(h("div", { class: "stack", style: { maxWidth: "640px", margin: "0 auto" } },
               h("p", { class: "pill" }, `${p.avatar} ${p.name}`), h("h2", null, text.replace("___", "______")),
-              h("div", { class: "options" }, options.filter(o => o.by !== p).map(o => h("button", { class: "opt", onclick: () => { o.votes.push(p); Sfx.click(); res(); } }, o.text)))));
+              h("p", { class: "muted" }, `Все ответы: ${options.length}. Свой выбрать нельзя — найди среди остальных правду.`),
+              h("div", { class: "options" }, options.map(o => o.by === p
+                ? h("button", { class: "opt", disabled: true, style: { opacity: .5 } }, o.text, h("div", { class: "small muted" }, "это твой ответ"))
+                : h("button", { class: "opt", onclick: () => { o.votes.push(p); Sfx.click(); res(); } }, o.text)))));
           });
         }
         // 3. Разоблачение
@@ -2467,7 +2549,7 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
     rules: [
       "Делитесь на две команды: «Молодёжь» и «Старшие». Команды угадывают по очереди.",
       "На экране — ребус из эмодзи. Это название песни. На размышление 40 секунд.",
-      "Без подсказки — 2 очка, с подсказкой — 1 очко.",
+      "Угадали — 2 очка. Подсказка стоит 1 очко: оно снимается сразу, как только вы её открыли, даже если потом не угадаете.",
       "Бонус +1: напойте мелодию угаданной песни (без слов тоже можно — «ля-ля-ля»).",
       "После ответа включите фрагмент, если он есть, и расскажите друг другу, что вы знаете об этой песне.",
     ],
@@ -2485,7 +2567,7 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
         ctx.onCleanup(() => timer.stop());
         const reveal = () => {
           timer.stop();
-          const pts = usedHint ? 1 : 2;
+          const pts = 2;
           U.clear(stage).append(scoreBar(teams, turn), h("div", { class: "center stack" },
             h("div", { class: "big-emoji", style: { fontSize: "64px" } }, em),
             h("div", { class: "title-xl" }, "«" + title + "»"), h("p", { class: "muted" }, hint),
@@ -2505,11 +2587,12 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
           }
           turn = 1 - turn; next();
         };
-        U.clear(stage).append(scoreBar(teams, turn), h("div", { class: "center stack" },
+        let bar = scoreBar(teams, turn);
+        U.clear(stage).append(bar, h("div", { class: "center stack" },
           h("span", { class: "pill" }, `Ребус ${n} из ${deck.length}`), h("h3", { style: { color: t.color } }, `Отгадывает команда ${t.avatar} «${t.name}»`),
           timer.el, h("div", { class: "big-emoji bounce", style: { fontSize: "clamp(64px, 16vw, 120px)", letterSpacing: "6px" } }, em), hintBox,
           h("div", { class: "row c" },
-            h("button", { class: "btn ghost", onclick: e => { usedHint = true; e.target.disabled = true; U.clear(hintBox).append(h("p", { class: "panel" }, "Подсказка: " + hint)); } }, "💡 Подсказка (−1 очко)"),
+            h("button", { class: "btn ghost", onclick: e => { usedHint = true; e.target.disabled = true; t.score -= 1; Sfx.bad(); const nb = scoreBar(teams, turn); bar.replaceWith(nb); bar = nb; U.clear(hintBox).append(h("p", { class: "panel" }, "Подсказка: " + hint)); } }, "💡 Подсказка (−1 очко)"),
             h("button", { class: "btn", onclick: reveal }, "Показать ответ"))));
         timer.start();
       };
@@ -2523,12 +2606,12 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
 "use strict";
 (() => {
   const WORDS = {
-    "Космос и небо": ["Гагарин", "космонавт", "ракета", "орбита", "созвездие", "невесомость", "скафандр", "лётчик", "парашют", "аэродром", "иллюминатор", "Байконур", "спутник", "небо", "звезда"],
-    "Великие стройки": ["стройка", "тайга", "ГЭС", "плотина", "бетон", "подъёмный кран", "каска", "бригада", "вахта", "палатка", "геолог", "буровая", "ЛЭП", "Сибирь", "Ангара", "Байкал", "рельсы", "экскаватор"],
-    "Спорт": ["хоккей", "шайба", "клюшка", "вратарь", "Олимпиада", "Олимпийский мишка", "воздушные шары", "стадион", "болельщик", "медаль", "пьедестал", "капитан", "тренер", "команда", "факел", "сборная"],
-    "Музыка": ["композитор", "поэт", "рояль", "пластинка", "мелодия", "припев", "куплет", "ноты", "дирижёр", "микрофон", "сцена", "аплодисменты", "хор", "оркестр", "радио", "магнитофон", "гитара", "песенник", "концерт", "репетиция"],
-    "Чувства и жизнь": ["нежность", "надежда", "дружба", "разлука", "встреча", "письмо", "вокзал", "поезд", "телеграмма", "молодость", "память", "мечта", "счастье", "костёр", "рюкзак", "юбилей", "фотоальбом", "бабушка"],
-    "Природа": ["зубр", "пуща", "клён", "тополь", "берёза", "метель", "северное сияние", "река", "сопка", "кедр", "рассвет"],
+    "Космос и небо": ["Гагарин", "космонавт", "ракета", "орбита", "созвездие", "невесомость", "скафандр", "лётчик", "парашют", "аэродром", "иллюминатор", "Байконур", "спутник", "небо", "звезда", "Луна", "Солнце", "комета", "метеорит", "телескоп", "планетарий", "Белка и Стрелка", "ракетоносец", "старт", "приземление", "звездолёт", "Млечный Путь", "Венера", "Марс", "обсерватория", "радуга", "облако", "самолёт", "штурман", "космодром"],
+    "Великие стройки": ["стройка", "тайга", "ГЭС", "плотина", "бетон", "подъёмный кран", "каска", "бригада", "вахта", "палатка", "геолог", "буровая", "ЛЭП", "Сибирь", "Ангара", "Байкал", "рельсы", "экскаватор", "тоннель", "мост", "шпалы", "вагончик", "общежитие", "лопата", "кирпич", "фундамент", "чертёж", "прораб", "сварщик", "мошкара", "плотник", "электричка", "тепловоз", "лесоповал", "нефть", "трактор", "котлован"],
+    "Спорт": ["хоккей", "шайба", "клюшка", "вратарь", "Олимпиада", "Олимпийский мишка", "воздушные шары", "стадион", "болельщик", "медаль", "пьедестал", "капитан", "тренер", "команда", "факел", "сборная", "гол", "штрафной", "трибуна", "свисток", "форма", "чемпион", "рекорд", "эстафета", "коньки", "лыжи", "финал", "разминка", "пьедестал почёта", "фигурное катание", "шахматы", "марафон", "болельщица", "кубок", "гимнастка", "буллит"],
+    "Музыка": ["композитор", "поэт", "рояль", "пластинка", "мелодия", "припев", "куплет", "ноты", "дирижёр", "микрофон", "сцена", "аплодисменты", "хор", "оркестр", "радио", "магнитофон", "гитара", "песенник", "концерт", "репетиция", "скрипка", "барабан", "баян", "гармонь", "песня", "композиция", "солист", "дуэт", "аккорд", "партитура", "наушники", "колонка", "кассета", "клип", "фонограмма", "камертон", "виолончель", "аккордеон", "балалайка"],
+    "Чувства и жизнь": ["нежность", "надежда", "дружба", "разлука", "встреча", "письмо", "вокзал", "поезд", "телеграмма", "молодость", "память", "мечта", "счастье", "костёр", "рюкзак", "юбилей", "фотоальбом", "бабушка", "улыбка", "слёзы", "объятия", "ожидание", "прощание", "дорога домой", "подарок", "праздник", "семья", "детство", "выпускной", "первая любовь", "верность", "доброта", "смелость", "трус", "гордость", "сюрприз", "секрет", "открытка"],
+    "Природа": ["зубр", "пуща", "клён", "тополь", "берёза", "метель", "северное сияние", "река", "сопка", "кедр", "рассвет", "ромашка", "одуванчик", "ель", "сосна", "озеро", "водопад", "гроза", "туман", "иней", "сугроб", "закат", "листопад", "медведь", "лось", "журавль", "соловей", "ручей", "поле", "остров", "скала"],
   };
   const ALL = Object.entries(WORDS).flatMap(([cat, ws]) => ws.map(w => [w, cat]));
 
@@ -2695,7 +2778,7 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
       "На экране появляется слово, например «небо».",
       "Команды по очереди поют хотя бы строчку любой песни, где есть это слово. На ход — 20 секунд.",
       "Повторять песни нельзя. Соперники решают, засчитать ли ответ.",
-      "Кто не успел вспомнить — проиграл раунд, соперники получают очко. За песню Пахмутовой и Добронравова — ещё +1.",
+      "Каждая спетая песня — +1 очко, песня Пахмутовой и Добронравова — +2. Кто не успел вспомнить — проиграл раунд, а соперники получают ещё +2.",
       "Застряли? Есть подсказка — название песни Пахмутовой на эту тему (не для всех слов).",
     ],
     async start(stage, ctx) {
@@ -2717,19 +2800,21 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
           U.clear(turnBox).append(
             h("h3", { style: { color: t.color } }, `Поёт команда ${t.avatar} «${t.name}»`), timer.el,
             h("div", { class: "row c" },
-              h("button", { class: "btn ok big", onclick: () => { timer.stop(); Sfx.ok(); sung++; turn = 1 - turn; drawTurn(); } }, "✓ Спели!"),
-              h("button", { class: "btn dark", onclick: () => { timer.stop(); Sfx.ok(); sung++; t.score++; toast("Песня Пахмутовой! +1"); turn = 1 - turn; drawTurn(); } }, "✓ Спели песню Пахмутовой (+1)"),
+              h("button", { class: "btn ok big", onclick: () => { timer.stop(); Sfx.ok(); sung++; t.score += 1; refresh(); turn = 1 - turn; drawTurn(); } }, "✓ Спели! (+1)"),
+              h("button", { class: "btn dark", onclick: () => { timer.stop(); Sfx.ok(); sung++; t.score += 2; refresh(); toast("Песня Пахмутовой и Добронравова! +2"); turn = 1 - turn; drawTurn(); } }, "✓ Спели песню Пахмутовой (+2)"),
               h("button", { class: "btn bad", onclick: () => { timer.stop(); lose(); } }, "✗ Не вспомнили")));
           timer.start();
         };
         const lose = async () => {
           const loser = teams[turn], winner = teams[1 - turn];
-          winner.score++; Sfx.buzz();
-          await modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji" }, "🏆"), h("h2", null, `Раунд за командой «${winner.name}»!`),
+          winner.score += 2; refresh(); Sfx.buzz();
+          await modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji" }, "🏆"), h("h2", null, `Раунд за командой «${winner.name}»! +2`),
             h("p", null, `Слово «${word}»: спето песен — ${sung}.`), hint ? h("p", { class: "muted" }, `А у Пахмутовой и Добронравова есть: ${hint}.`) : null), { buttons: [{ text: "Следующее слово ▶" }] });
           nextRound();
         };
-        U.clear(stage).append(scoreBar(teams), h("div", { class: "center stack" },
+        let bar = scoreBar(teams);
+        const refresh = () => { const nb = scoreBar(teams); bar.replaceWith(nb); bar = nb; };
+        U.clear(stage).append(bar, h("div", { class: "center stack" },
           h("span", { class: "pill" }, `Раунд ${round} из ${ROUNDS}`), h("p", { class: "muted" }, "Пойте песни со словом"),
           h("div", { class: "title-xl bounce", style: { fontSize: "clamp(40px, 10vw, 72px)", color: "var(--accent)" } }, "«" + word + "»"),
           hint ? h("button", { class: "btn ghost small", onclick: e => { e.target.replaceWith(h("p", { class: "panel" }, "Подсказка: " + hint)); } }, "💡 Подсказка из песен Пахмутовой") : null,
@@ -2957,38 +3042,67 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
 /* 10–11 классы · Я с семьёй · «Переводчик поколений» — слова 1960–80-х против слов XXI века */
 "use strict";
 (() => {
-  // [слово, верное объяснение, три ложных]
+  // [слово, верное объяснение, три ложных, пояснение после ответа]
+  // Все варианты нарочно похожей длины и правдоподобные, чтобы ответ нельзя было угадать по форме
   const OLD = [
-    ["Гибкая пластинка", "Тонкая пластинка с песнями, её вкладывали прямо в журнал «Кругозор»", ["Гимнастический коврик", "Сорт жевательной резинки", "Пластырь для мозолей"]],
-    ["«Концерт по заявкам»", "Радиопередача: песни ставили по письмам слушателей с поздравлениями", ["Концерт, на который пускали только по заявлению", "Список песен для выпускного", "Конкурс самодеятельности"]],
-    ["Стройотряд", "Студенты, которые летом ехали работать на стройки", ["Отряд военных строителей", "Кружок моделирования", "Футбольная команда завода"]],
-    ["ВИА", "Вокально-инструментальный ансамбль — как «Песняры» или «Самоцветы»", ["Всесоюзное информационное агентство", "Вид гимнастики", "Марка магнитофона"]],
-    ["Песенник", "Тетрадь, куда от руки переписывали слова любимых песен", ["Певец в церковном хоре", "Музыкальный автомат в кафе", "Учебник сольфеджио"]],
-    ["Двушка для автомата", "Монета в 2 копейки — ею платили за звонок из телефона-автомата", ["Двухпалубный теплоход", "Вторая серия фильма", "Двухколёсный велосипед"]],
-    ["Бобинный магнитофон", "Магнитофон, где плёнка намотана на большие катушки-бобины", ["Прибор для намотки ниток", "Рыболовная катушка", "Кинопроектор"]],
-    ["Авоська", "Сетчатая сумка: носили с собой — «авось» что-нибудь купишь", ["Шапка-ушанка", "Детская кукла", "Кошелёк на верёвочке"]],
-    ["Телеграмма", "Срочное сообщение через почту: платили за каждое слово, поэтому писали коротко — ЗПТ, ТЧК", ["Письмо на телевидение", "Газета с телепрограммой", "Посылка с граммофоном"]],
-    ["Радиола", "Радиоприёмник и проигрыватель пластинок в одном корпусе", ["Модный танец", "Ведущая радиопередачи", "Радиоуправляемая игрушка"]],
-    ["«Голубой огонёк»", "Праздничный телеконцерт, где артисты и гости сидели за столиками", ["Газовая плита", "Ночник в детской", "Кафе-мороженое"]],
-    ["Диафильм", "Плёнка с картинками и подписями — её показывали на стену через проектор", ["Короткий мультфильм", "Фильм для дипломатов", "Фотоальбом"]],
-    ["Дефицит", "Товар, который трудно купить: за ним стояли в очередях", ["Недостаток витаминов", "Плохая оценка", "Скидочная карта"]],
-    ["Таксофон", "Уличный телефон-автомат", ["Телефон таксиста", "Счётчик в такси", "Радио в машине"]],
+    ["Гибкая пластинка", "Тонкая пластинка, вложенная в журнал", ["Пластинка для детского проигрывателя", "Резиновый коврик под проигрыватель", "Плёнка для домашнего диафильма"],
+      "Тонкие пластинки с песнями вкладывали, например, в журнал «Кругозор» — его можно было слушать."],
+    ["«Концерт по заявкам»", "Радиопередача с песнями по письмам", ["Концерт, куда пускали по спискам", "Отчётный концерт музыкальной школы", "Телеконкурс самодеятельных артистов"],
+      "Слушатели писали письма с поздравлениями, и в эфире для их близких звучали песни."],
+    ["Стройотряд", "Студенты, летом работавшие на стройках", ["Солдаты строительных войск", "Школьный кружок юных архитекторов", "Бригада ремонтников при домоуправлении"],
+      "Студенческие строительные отряды ездили на стройки по всей стране — в том числе в Сибирь."],
+    ["ВИА", "Ансамбль, где поют и играют на гитарах", ["Всесоюзное издательство аудиозаписей", "Вечерний информационный альманах", "Выставка изобразительного искусства"],
+      "ВИА — вокально-инструментальный ансамбль, например «Песняры» или «Самоцветы»."],
+    ["Песенник", "Тетрадь со словами любимых песен", ["Самоучитель игры на гитаре", "Участник школьного хора", "Сборник нот для фортепиано"],
+      "Слова песен переписывали от руки и украшали рисунками и вырезками."],
+    ["Двушка", "Монета для звонка из автомата", ["Двухместная палатка для похода", "Вторая серия по телевизору", "Двойной билет в кино"],
+      "Звонок из телефона-автомата стоил 2 копейки, поэтому двушки берегли и носили с собой."],
+    ["Бобинник", "Магнитофон с плёнкой на больших катушках", ["Станок для намотки ниток на фабрике", "Проигрыватель для толстых пластинок", "Кинопроектор для домашних фильмов"],
+      "Плёнку наматывали на бобины — большие открытые катушки."],
+    ["Авоська", "Сетчатая сумка, которую носили на всякий случай", ["Холщовый мешок для картошки", "Кошелёк на длинном шнурке", "Плетёная корзинка для грибов"],
+      "Название — от слова «авось»: вдруг по дороге удастся что-нибудь купить."],
+    ["Телеграмма", "Срочное сообщение, где платили за слово", ["Письмо в редакцию телевидения", "Программа передач на неделю", "Открытка с напечатанной маркой"],
+      "Чтобы сэкономить, писали коротко, а знаки препинания заменяли словами: ЗПТ, ТЧК."],
+    ["Радиола", "Радиоприёмник и проигрыватель в одном", ["Ведущая утренней радиопередачи", "Танцевальный вечер под радио", "Переносной приёмник на батарейках"],
+      "Радиола — большой деревянный ящик: сверху проигрыватель пластинок, внутри радио."],
+    ["«Голубой огонёк»", "Праздничный телеконцерт за столиками", ["Сигнал, что кончился бензин", "Название новогодней гирлянды", "Детская передача про пожарных"],
+      "Артисты и гости сидели за столиками, как в кафе, — особенно ждали новогодний выпуск."],
+    ["Диафильм", "Картинки на плёнке, показанные на стену", ["Короткий мультфильм перед сеансом", "Фотографии в домашнем альбоме", "Учебный фильм для уроков физики"],
+      "Плёнку с кадрами и подписями крутили вручную в проекторе — кадр за кадром."],
+    ["Дефицит", "Товар, который трудно было купить", ["Нехватка витаминов весной", "Долг по квартплате", "Брак на заводе"],
+      "За дефицитными вещами стояли в длинных очередях."],
+    ["Таксофон", "Уличный телефон-автомат", ["Рация в машине такси", "Счётчик в машине такси", "Телефон диспетчера такси"],
+      "Позвонить с улицы можно было только из таксофона — мобильных телефонов не было."],
   ];
   const NEW = [
-    ["Плейлист", "Список треков, чтобы слушать их подряд", ["Плед для пикника", "Лист бумаги для игр", "Гастрольный тур"]],
-    ["Кавер", "Новое исполнение чужой песни", ["Ковёр с узором", "Солист группы", "Ошибка в записи"]],
-    ["Фит", "Совместный трек двух исполнителей", ["Фитнес-браслет", "Удачная фотография", "Пробный куплет"]],
-    ["Сниппет", "Короткий отрывок песни, который выкладывают до выхода трека", ["Маленькие ножницы", "Беспроводной наушник", "Самый преданный фанат"]],
-    ["Стрим", "Прямая трансляция в интернете", ["Поток воды в аквапарке", "Стремянка", "Строгий учитель"]],
-    ["Кринж", "Чувство неловкости, «испанский стыд»", ["Мороженое в рожке", "Хруст снега", "Восторг"]],
-    ["Вайб", "Атмосфера, настроение места или песни", ["Вибрация телефона", "Вид гитары", "Рюкзак"]],
-    ["Хайп", "Шумиха и ажиотаж вокруг чего-то", ["Высокая причёска", "Громкий крик", "Скидка"]],
-    ["Донат", "Добровольный денежный перевод автору или стримеру", ["Спортивный разряд", "Билет в кино", "Подпись артиста"]],
-    ["Подкаст", "Аудиопередача, которая выходит выпусками", ["Подставка для наушников", "Подземный переход", "Мини-концерт"]],
-    ["Лайв", "Живое исполнение — без фонограммы", ["Лайк в соцсети", "Модный цвет", "Прыжок со сцены"]],
-    ["Залипать", "Надолго увлечься чем-то и не отрываться", ["Приклеиться к парте", "Опоздать на урок", "Заснуть в транспорте"]],
-    ["Спойлер", "Раскрытие сюжета заранее", ["Деталь гоночной машины", "Испорченная песня", "Ложка для торта"]],
-    ["Ремикс", "Новая обработка уже существующей песни", ["Повторный экзамен", "Смесь соков", "Ремонт колонок"]],
+    ["Плейлист", "Подборка треков для прослушивания", ["Лист с текстом песни", "Список гостей вечеринки", "Расписание концертного тура"],
+      "Плейлисты собирают под настроение, дорогу или занятие."],
+    ["Кавер", "Своё исполнение чужой песни", ["Обложка нового альбома", "Ведущий солист группы", "Запись песни без голоса"],
+      "Кавер-версии делают на известные песни — в том числе на песни Пахмутовой."],
+    ["Фит", "Песня, записанная двумя артистами", ["Короткий танец под песню", "Удачное фото на обложку", "Пробная запись куплета"],
+      "От английского featuring — «с участием»."],
+    ["Сниппет", "Отрывок песни до её выхода", ["Повтор припева в конце", "Звук уведомления в телефоне", "Ошибка исполнителя на концерте"],
+      "Кусочек трека выкладывают заранее, чтобы слушатели его ждали."],
+    ["Стрим", "Прямая трансляция в интернете", ["Запись лекции в институте", "Видео с обзором покупки", "Большая сетевая игра"],
+      "Зрители смотрят и пишут в чат прямо во время трансляции."],
+    ["Кринж", "Чувство неловкости за кого-то", ["Сильное удивление от новости", "Желание спать после урока", "Раздражение от громкой музыки"],
+      "Ещё говорят «испанский стыд»."],
+    ["Вайб", "Атмосфера и настроение", ["Вибрация телефона в кармане", "Модный стиль одежды", "Громкость музыки в наушниках"],
+      "«Хороший вайб» — когда в месте или песне хорошее настроение."],
+    ["Хайп", "Шумиха вокруг чего-то", ["Высокая модная причёска", "Распродажа со скидками", "Победа в соревновании"],
+      "О хайповой вещи все говорят — но иногда быстро забывают."],
+    ["Донат", "Деньги в поддержку автора", ["Сладкий пончик с глазурью", "Платная подписка на кино", "Подарок на день рождения"],
+      "Зрители переводят деньги любимому автору или стримеру добровольно."],
+    ["Подкаст", "Аудиопередача, выходящая выпусками", ["Подставка для микрофона", "Короткое видео в ленте", "Запись голосового сообщения"],
+      "Подкасты слушают в дороге, как раньше — радио."],
+    ["Лайв", "Живое исполнение на концерте", ["Отметка «нравится» в сети", "Запись песни в студии", "Прямой эфир новостей"],
+      "Лайв — без фонограммы, по-настоящему."],
+    ["Залипать", "Долго не отрываться от чего-то", ["Опаздывать на первый урок", "Засыпать в транспорте", "Застревать в пробке"],
+      "Например, залипнуть в ленту коротких видео."],
+    ["Спойлер", "Раскрытие сюжета заранее", ["Деталь гоночной машины", "Короткий анонс фильма", "Неудачный конец сериала"],
+      "У гоночной машины тоже есть спойлер — но здесь речь о кино и книгах!"],
+    ["Ремикс", "Новая обработка готовой песни", ["Запись песни на старую плёнку", "Смесь двух разных жанров", "Повтор концерта по телевизору"],
+      "В ремиксе меняют ритм, звучание, иногда темп песни."],
   ];
   const BRIDGES = [
     ["📒 Песенник", "🎧 Плейлист", "Что у них общего? Почему раньше слова песен переписывали от руки, а сейчас просто сохраняют трек?"],
@@ -3021,7 +3135,7 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
           await modal(h("div", { class: "center stack" }, h("h2", null, "🌉 Мост поколений"), h("div", { class: "row c", style: { fontSize: "22px", fontWeight: 700 } }, a, "↔", b), h("p", { style: { fontSize: "18px" } }, q)), { buttons: [{ text: "Обсудили ▶" }] });
         }
         const ti = k % 2, t = teams[ti];
-        const [word, right, wrong] = (ti === 0 ? oldD : newD)[k >> 1];
+        const [word, right, wrong, note] = (ti === 0 ? oldD : newD)[k >> 1];
         k++;
         const opts = U.shuffle([right, ...wrong]);
         const box = h("div", { class: "stack", style: { maxWidth: "720px", margin: "0 auto" } },
@@ -3033,7 +3147,7 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
         const ok = await askOptions(box, opts, opts.indexOf(right));
         if (ok) t.score++;
         const other = teams[1 - ti];
-        U.clear(after).append(h("div", { class: "fact" }, h("b", null, word + " — "), right.charAt(0).toLowerCase() + right.slice(1) + "."),
+        U.clear(after).append(h("div", { class: "fact" }, h("b", null, word + " — "), right.charAt(0).toLowerCase() + right.slice(1) + ". ", note),
           h("p", null, ti === 0 ? `«${other.name}», расскажите: было ли это у вас? Что с этим связано?` : `«${other.name}», покажите или расскажите, где это встречается у вас.`),
           h("button", { class: "btn big", onclick: next }, "Дальше ▶"));
       };
@@ -3365,8 +3479,10 @@ function intro(stage, { emoji, title, text, btn = "Начать ▶", extra }) {
     ["Улыбка (из мультфильма «Крошка Енот»)", false], ["Голубой вагон", false], ["Песенка крокодила Гены (из мультфильма про Чебурашку)", false],
     ["В траве сидел кузнечик", false], ["Чунга-Чанга", false], ["Прекрасное далёко", false], ["Крылатые качели", false], ["Катюша", false],
     ["Подмосковные вечера", false], ["Калинка", false], ["Трава у дома", false], ["Миллион алых роз", false], ["Ой, мороз, мороз", false],
-    ["Песенка о медведях (из фильма «Кавказская пленница»)", false], ["В лесу родилась ёлочка", false], ["Happy Birthday to You", false],
+    ["Песенка о медведях (из фильма «Кавказская пленница»)", false], ["В лесу родилась ёлочка", false],
     ["Гимн России", false], ["Песенка Винни-Пуха (из советского мультфильма)", false], ["Антошка", false], ["Пусть всегда будет солнце", false],
+    ["Я шагаю по Москве", false], ["Песенка о хорошем настроении", false], ["Кабы не было зимы", false], ["Три белых коня", false],
+    ["Учат в школе", false], ["Вместе весело шагать", false], ["Облака (из мультфильма «Трям! Здравствуйте!»)", false], ["Мы желаем счастья вам", false],
   ];
 
   Games.register({

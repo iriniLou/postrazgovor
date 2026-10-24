@@ -135,19 +135,20 @@
       };
 
       const move = (dx, dy) => {
+        if (document.querySelector(".modal-back")) return;
         const x = px + dx, y = py + dy;
         if (!g[y] || g[y][x] !== 0) { board.classList.remove("shake"); void board.offsetWidth; board.classList.add("shake"); return; }
         px = x; py = y; steps++; Sfx.step();
         const it = items.find(i => !i.taken && i.x === x && i.y === y);
         if (it) {
           it.taken = true; got++; Sfx.ok();
-          toast(`${it.it[0]} Нашёл ${it.it[1]}! ${it.it[2]}`, 2600); Voice.say(`Нашёл ${it.it[1]}! ${it.it[2]}`);
+          modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji bounce" }, it.it[0]), h("h2", null, `Нашёл ${it.it[1]}!`), h("p", { style: { fontSize: "21px" } }, it.it[2])), { buttons: [{ text: "Дальше ▶" }] });
         }
         const f = fish.find(f => !f.taken && f.x === x && f.y === y);
         if (f) { f.taken = true; Sfx.tone(880, .1, "triangle"); }
         paint();
         if (x === W - 2 && y === H - 2) {
-          if (got < 2) { toast("Сначала найди оба предмета! 🔍"); Voice.say("Сначала найди оба предмета!"); Sfx.bad(); return; }
+          if (got < 2) { Sfx.bad(); modal(h("div", { class: "center stack" }, h("div", { class: "big-emoji" }, "🔍"), h("h2", null, "Сначала найди оба предмета!"), h("p", { style: { fontSize: "21px" } }, "Посмотри наверху, что ещё осталось найти: " + items.filter(i => !i.taken).map(i => i.it[0] + " " + i.it[1]).join(", "))), { buttons: [{ text: "Ищу! ▶" }] }); return; }
           levelDone();
         }
       };

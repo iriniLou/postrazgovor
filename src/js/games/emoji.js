@@ -29,7 +29,7 @@
     rules: [
       "Делитесь на две команды: «Молодёжь» и «Старшие». Команды угадывают по очереди.",
       "На экране — ребус из эмодзи. Это название песни. На размышление 40 секунд.",
-      "Без подсказки — 2 очка, с подсказкой — 1 очко.",
+      "Угадали — 2 очка. Подсказка стоит 1 очко: оно снимается сразу, как только вы её открыли, даже если потом не угадаете.",
       "Бонус +1: напойте мелодию угаданной песни (без слов тоже можно — «ля-ля-ля»).",
       "После ответа включите фрагмент, если он есть, и расскажите друг другу, что вы знаете об этой песне.",
     ],
@@ -47,7 +47,7 @@
         ctx.onCleanup(() => timer.stop());
         const reveal = () => {
           timer.stop();
-          const pts = usedHint ? 1 : 2;
+          const pts = 2;
           U.clear(stage).append(scoreBar(teams, turn), h("div", { class: "center stack" },
             h("div", { class: "big-emoji", style: { fontSize: "64px" } }, em),
             h("div", { class: "title-xl" }, "«" + title + "»"), h("p", { class: "muted" }, hint),
@@ -67,11 +67,12 @@
           }
           turn = 1 - turn; next();
         };
-        U.clear(stage).append(scoreBar(teams, turn), h("div", { class: "center stack" },
+        let bar = scoreBar(teams, turn);
+        U.clear(stage).append(bar, h("div", { class: "center stack" },
           h("span", { class: "pill" }, `Ребус ${n} из ${deck.length}`), h("h3", { style: { color: t.color } }, `Отгадывает команда ${t.avatar} «${t.name}»`),
           timer.el, h("div", { class: "big-emoji bounce", style: { fontSize: "clamp(64px, 16vw, 120px)", letterSpacing: "6px" } }, em), hintBox,
           h("div", { class: "row c" },
-            h("button", { class: "btn ghost", onclick: e => { usedHint = true; e.target.disabled = true; U.clear(hintBox).append(h("p", { class: "panel" }, "Подсказка: " + hint)); } }, "💡 Подсказка (−1 очко)"),
+            h("button", { class: "btn ghost", onclick: e => { usedHint = true; e.target.disabled = true; t.score -= 1; Sfx.bad(); const nb = scoreBar(teams, turn); bar.replaceWith(nb); bar = nb; U.clear(hintBox).append(h("p", { class: "panel" }, "Подсказка: " + hint)); } }, "💡 Подсказка (−1 очко)"),
             h("button", { class: "btn", onclick: reveal }, "Показать ответ"))));
         timer.start();
       };
